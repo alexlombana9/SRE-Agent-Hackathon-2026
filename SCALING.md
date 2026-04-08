@@ -12,14 +12,15 @@ Trusty is built on **Convex**, a fully managed serverless backend. This fundamen
 
 | Component | Capacity | Bottleneck |
 |-----------|----------|------------|
-| Convex backend (queries/mutations) | ~1M operations/day (free tier), unlimited (paid) | Convex plan limits |
-| Convex actions (long-running, agents) | Concurrent execution, auto-scaled by Convex | Convex plan concurrency limits |
-| Claude Sonnet 4.6 (Anthropic) | ~60 requests/min (standard tier) | **Primary bottleneck** |
-| Vercel Sandbox | ~10 concurrent sessions (standard) | Sandbox concurrency limit |
-| Linear API | 1,500 requests/min | Rarely a bottleneck |
-| Slack/Discord Webhooks | ~1 msg/sec per webhook | Webhook rate limiting |
-| SendGrid Email | 100 emails/day (free), 100/sec (paid) | Tier-dependent |
-| Twilio SMS | Pay-per-message | Cost, not throughput |
+| Convex backend (queries/mutations) | 1M calls/month (Starter free), 25M calls/month (Professional $25/dev/mo) | Convex plan limits |
+| Convex actions (agent execution) | 64 concurrent (Starter), 512 concurrent (Professional) | Convex plan concurrency |
+| Claude Sonnet 4.6 (Anthropic) | Tier-dependent; rate limits increase with spend history | **Primary bottleneck** |
+| Vercel Sandbox | 10 concurrent (Hobby), 2,000 concurrent (Pro) | Sandbox concurrency limit |
+| Linear API | Not publicly documented; contact Linear for limits | Rarely a bottleneck |
+| Slack Incoming Webhooks | 1 message/second (short bursts allowed) | Webhook rate limiting |
+| Discord Webhooks | ~50 requests/second (global bot limit) | Global rate limit |
+| Resend Email | 3,000 emails/month free (100/day cap); Pro: 50,000/month at $20/month | Tier-dependent |
+| Twilio SMS | $0.0083/msg + $0.003–$0.005 carrier surcharge (US) | Cost, not throughput |
 | Langfuse (cloud) | Unlimited (cloud) | N/A |
 
 **Estimated throughput:** ~50-60 full triage pipelines per hour (limited by Anthropic rate limits — 5 LLM calls per pipeline: Analyzer + Ticketer + Notifier × 2 + QA Reviewer, with Debugger using additional calls per iteration).
@@ -48,7 +49,7 @@ Trusty is built on **Convex**, a fully managed serverless backend. This fundamen
 **What requires manual action:**
 - Request a higher Anthropic API tier to increase LLM rate limits
 - Upgrade Convex plan for higher action concurrency
-- Use SendGrid paid tier for email volume above 100/day
+- Use Resend Pro tier ($20/month) for email volume above 3,000/month or 100/day
 
 **Cost:** Minimal. Only requires upgrading API tiers.
 
@@ -151,23 +152,29 @@ Convex's reactive query system is a WebSocket-based push protocol managed entire
 
 | Priority | Bottleneck | Impact | Mitigation |
 |----------|-----------|--------|------------|
-| 1 | Anthropic API rate limits | Caps pipeline throughput at ~60/hour | Higher tier, multiple keys, Haiku for simple agents |
-| 2 | Vercel Sandbox concurrency | Limits simultaneous autonomous debug sessions | Sandbox session pooling, pre-warming |
-| 3 | Sequential agent pipeline | Adds latency for each step | Parallelize Notifier with Debugger |
-| 4 | Linear API rate limits | Rarely hit at current scale | Request higher tier if needed |
-| 5 | Slack/Discord rate limits | Limits notification burst | Batch notifications during high-volume events |
+| 1 | Anthropic API rate limits | Caps pipeline throughput (tier-dependent) | Higher spend tier, multiple keys, Haiku 4.5 for simple agents |
+| 2 | Vercel Sandbox concurrency | 10 concurrent (Hobby) / 2,000 (Pro) debug sessions | Upgrade to Pro; pre-warm sessions during peak hours |
+| 3 | Sequential agent pipeline | Adds latency per step | Parallelize Notifier with Debugger |
+| 4 | Slack webhooks | 1 msg/sec sustained limit | Queue notifications; batch updates during high-volume events |
+| 5 | Resend email | 100 emails/day (free) / 50k/month (Pro) | Upgrade to Pro at $20/month when volume exceeds free tier |
 
 ---
 
 ## Cost Model (Approximate)
 
+Pricing based on official rates as of April 2026.
+
+**Claude Sonnet 4.6:** $3.00/MTok input · $15.00/MTok output  
+**Assumption per triage:** ~1,500 input tokens + ~800 output tokens per agent call × 6 calls = ~9,000 input + ~4,800 output tokens total
+
 | Component | Cost at 60 triages/hour | Cost at 1,000 triages/hour |
 |-----------|------------------------|---------------------------|
-| Claude Sonnet 4.6 | ~$1.50/hour (5 calls × 1k tokens avg) | ~$25/hour |
-| Convex (paid plan) | ~$25/month flat | ~$100-300/month |
-| Vercel Sandbox | ~$0.05/session | ~$50/hour at peak |
-| SendGrid (email) | ~$0.001/email | ~$1/hour |
-| Twilio (SMS, Critical only) | ~$0.01/SMS × 10% of volume | ~$1/hour |
-| Linear | Fixed team plan | Fixed team plan |
+| Claude Sonnet 4.6 | ~$1.62/hour (9k in + 4.8k out tokens × 60 × API rates) | ~$27/hour |
+| Convex Professional | $25/developer/month (flat per seat) | $25/developer/month |
+| Vercel Sandbox (Pro) | ~$0.03/session (5-min AI code validation) × 60 = ~$1.80/hour | ~$30/hour |
+| Resend (email) | Free tier covers low volume; $20/month Pro = 50k emails/month | ~$0.001/email overage |
+| Twilio SMS (Critical only, ~10% of volume) | ~$0.013/SMS (base $0.0083 + ~$0.004 carrier surcharge) × 6 = ~$0.08/hour | ~$1.30/hour |
+| Linear | Fixed team plan (not usage-based) | Fixed team plan |
 
-**Total at baseline:** ~$2-3/hour during peak, ~$30-50/month at moderate usage.
+**Total at baseline (60 triages/hour):** ~$3.50–$4.00/hour during peak  
+**Total at scale (1,000 triages/hour):** ~$58–$60/hour

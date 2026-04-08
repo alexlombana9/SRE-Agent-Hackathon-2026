@@ -70,7 +70,7 @@ Built for the **AgentX Hackathon 2026** on top of Convex, Clerk, and Claude Sonn
 | AI Agents | Convex AI Agent Component + Claude Sonnet 4.6 |
 | LLM | `claude-sonnet-4-6` (multimodal: text + images + logs) |
 | Ticketing | Linear API |
-| Notifications | Slack Webhooks, Discord Webhooks, SendGrid Email, Twilio SMS |
+| Notifications | Slack Webhooks, Discord Webhooks, Resend Email, Twilio SMS |
 | Sandbox | Vercel Sandbox SDK (isolated code execution for debugging) |
 | Observability | Langfuse (LLM traces, token usage, latency) |
 | Validation | Zod (schema validation throughout) |
@@ -115,7 +115,7 @@ Analyzer output → Ticketer Agent (Claude Sonnet 4.6)
 Ticket data → Notifier Agent (Claude Sonnet 4.6)
               ├── Tool: send_slack_message   → #sre-incidents channel
               ├── Tool: send_discord_message → SRE Discord server
-              ├── Tool: send_email           → assigned team + reporter
+              ├── Tool: send_email (Resend)  → assigned team + reporter
               └── Tool: send_sms             → on-call engineer (critical only)
 ```
 

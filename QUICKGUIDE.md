@@ -18,7 +18,7 @@ Step-by-step instructions to run and test **Trusty** — the SRE AI Agent platfo
 | Linear | Ticketing | https://linear.app/settings/api |
 | Slack | Incident notifications | https://api.slack.com/messaging/webhooks |
 | Discord | Incident notifications | https://discord.com/developers/docs/resources/webhook |
-| SendGrid | Email notifications | https://app.sendgrid.com/settings/api_keys |
+| Resend | Email notifications | https://resend.com/api-keys |
 | Twilio | SMS notifications (Critical only) | https://console.twilio.com |
 | Langfuse | LLM observability | https://cloud.langfuse.com or self-hosted |
 | Vercel | Sandbox SDK (autonomous debugging) | https://vercel.com/docs/vercel-sandbox/sdk-reference |
@@ -67,9 +67,9 @@ SLACK_CRITICAL_CHANNEL=#sre-critical
 # Discord
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR/WEBHOOK
 
-# SendGrid
-SENDGRID_API_KEY=SG.your-sendgrid-key
-SENDGRID_FROM_EMAIL=your-verified-sender@example.com
+# Resend
+RESEND_API_KEY=re_your-resend-api-key
+RESEND_FROM_EMAIL=your-verified-sender@example.com
 
 # Twilio (Critical SMS only)
 TWILIO_ACCOUNT_SID=ACxxxxx
@@ -257,7 +257,7 @@ pnpm dev:convex
 | Linear ticket not created | Verify `LINEAR_API_KEY` and `LINEAR_TEAM_ID` — test with the Linear API playground |
 | Slack notifications not arriving | Test webhook: `curl -X POST -H 'Content-Type: application/json' -d '{"text":"test"}' YOUR_WEBHOOK_URL` |
 | Discord notifications not arriving | Test webhook similarly with Discord's webhook URL |
-| SendGrid email not sending | Verify sender email is verified in SendGrid dashboard |
+| Resend email not sending | Verify `RESEND_API_KEY` is valid and `RESEND_FROM_EMAIL` uses a verified domain in the Resend dashboard |
 | Vercel Sandbox errors | Verify `VERCEL_TOKEN` has permission to create sandbox sessions |
 | Langfuse not loading | Wait 2-3 minutes for all dependencies to initialize (self-hosted) |
 | Clerk auth not working | Verify `CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` match your Clerk app |

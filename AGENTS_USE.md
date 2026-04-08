@@ -54,7 +54,7 @@
 | **LLM** | Claude Sonnet 4.6 (message composition) |
 | **Inputs** | Incident data, ticket data, classifier output, notification_phase: `"intake"` or `"resolution"` |
 | **Outputs** | `{notifications_sent: [{channel, recipient, status, message_type, timestamp}]}` |
-| **Tools** | `send_slack_message` (Slack Webhook → #sre-incidents or #sre-critical), `send_discord_message` (Discord Webhook → SRE server), `send_email` (SendGrid — team + reporter), `send_sms` (Twilio — on-call engineer for Critical only), `record_notification` (Convex mutation) |
+| **Tools** | `send_slack_message` (Slack Webhook → #sre-incidents or #sre-critical), `send_discord_message` (Discord Webhook → SRE server), `send_email` (Resend — team + reporter), `send_sms` (Twilio — on-call engineer for Critical only), `record_notification` (Convex mutation) |
 
 ### Agent: Debugger
 
