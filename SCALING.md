@@ -1,155 +1,149 @@
-# Scaling Analysis
+# Scaling Analysis — Trusty SRE Platform
+
+## Architecture Overview
+
+Trusty is built on **Convex**, a fully managed serverless backend. This fundamentally changes the scaling story compared to traditional self-hosted stacks: horizontal scaling of the backend tier is handled automatically by the platform rather than requiring manual infrastructure work.
+
+---
 
 ## Current Architecture Capacity
 
-### Single-Instance Baseline
-
-The application runs as a single Docker Compose stack with the following characteristics:
+### Single-Deployment Baseline
 
 | Component | Capacity | Bottleneck |
 |-----------|----------|------------|
-| FastAPI backend | ~500 req/s for CRUD, ~10 concurrent triages | LLM API calls during triage |
-| SQLite database | ~1,000 concurrent reads, 1 write at a time | Write lock under concurrent triage |
-| Claude Sonnet 4.6 | ~60 requests/min (API rate limit) | Primary bottleneck for triage throughput |
-| Slack Webhooks | ~1 msg/sec per webhook | Slack rate limiting |
-| SendGrid Email | ~100 emails/sec (free tier: 100/day) | Tier-dependent |
-| Langfuse | Depends on self-hosted resources | Postgres + ClickHouse capacity |
+| Convex backend (queries/mutations) | ~1M operations/day (free tier), unlimited (paid) | Convex plan limits |
+| Convex actions (long-running, agents) | Concurrent execution, auto-scaled by Convex | Convex plan concurrency limits |
+| Claude Sonnet 4.6 (Anthropic) | ~60 requests/min (standard tier) | **Primary bottleneck** |
+| Vercel Sandbox | ~10 concurrent sessions (standard) | Sandbox concurrency limit |
+| Linear API | 1,500 requests/min | Rarely a bottleneck |
+| Slack/Discord Webhooks | ~1 msg/sec per webhook | Webhook rate limiting |
+| SendGrid Email | 100 emails/day (free), 100/sec (paid) | Tier-dependent |
+| Twilio SMS | Pay-per-message | Cost, not throughput |
+| Langfuse (cloud) | Unlimited (cloud) | N/A |
 
-**Estimated throughput:** ~50-60 incidents triaged per hour (limited by LLM API rate).
+**Estimated throughput:** ~50-60 full triage pipelines per hour (limited by Anthropic rate limits — 5 LLM calls per pipeline: Analyzer + Ticketer + Notifier × 2 + QA Reviewer, with Debugger using additional calls per iteration).
 
 ### Assumptions
 
-1. Each triage invokes **4 LLM calls** (one per sub-agent: Analyzer, Classifier, Ticketer, Notifier)
-2. Average triage takes **15-30 seconds** end-to-end (dominated by LLM latency)
-3. Average incident report is **500-2000 characters** with 0-3 attachments
-4. Peak load expected during business hours, not 24/7 sustained
-5. Most incidents are Medium/Low severity (~70%), High (~20%), Critical (~10%)
+1. Each full triage invokes **5-8 LLM calls** (5 base agents + up to 3 Debugger iterations)
+2. Average triage + debug cycle takes **30-90 seconds** end-to-end (LLM latency dominant)
+3. Average incident has **500-2000 character** description + 0-3 attachments
+4. Vercel Sandbox sessions average **20-40 seconds** per debug attempt
+5. Peak load during business hours; mostly idle overnight
+6. Most incidents are Medium/Low (~65%), High (~25%), Critical (~10%)
 
 ---
 
 ## Scaling Strategy
 
-### Phase 1: Vertical Scaling (Current → 200 incidents/hour)
+### Phase 1: Platform Defaults (Current → ~60 triages/hour)
+
+**What Convex handles automatically:**
+- Serverless function scaling — no backend instances to manage
+- Real-time WebSocket connections — no separate socket server needed
+- Database read scaling via Convex's built-in read replica layer
+- File storage (attachments) via Convex File Storage — object storage, auto-scaled
+
+**What requires manual action:**
+- Request a higher Anthropic API tier to increase LLM rate limits
+- Upgrade Convex plan for higher action concurrency
+- Use SendGrid paid tier for email volume above 100/day
+
+**Cost:** Minimal. Only requires upgrading API tiers.
+
+### Phase 2: Parallel Agent Execution (60 → 300 triages/hour)
 
 **What changes:**
-- Increase API rate limits with Anthropic (higher tier plan)
-- Use SQLite WAL mode for better concurrent read/write performance
-- Add connection pooling for external services (Slack, SendGrid)
 
-**What stays the same:**
-- Single Docker Compose deployment
-- SQLite as the database
-- Synchronous sub-agent pipeline
+The current pipeline is sequential. Parallelism can be introduced at two points:
+1. **Notifier Agent** can run concurrently with the start of the **Debugger Agent** — notifications don't need to wait for debugging to complete
+2. **Multiple Anthropic API keys** distributed across Convex action workers to multiply effective rate limits
 
-**Cost:** Minimal. Only requires a higher Anthropic API tier.
+```
+Analyzer → Ticketer → ┬─ Notifier (concurrent)
+                       └─ Debugger → QA → Resolution Notifier
+```
 
-### Phase 2: Horizontal Backend Scaling (200 → 1,000 incidents/hour)
+This reduces total wall-clock time from ~90s to ~50s and increases throughput by removing the notification bottleneck from the critical path.
+
+**Convex-native approach:** Convex actions can be scheduled concurrently using `ctx.scheduler.runAfter(0, ...)` — no additional infrastructure needed. No Redis, no Celery, no separate worker processes.
+
+### Phase 3: Multi-Key LLM Distribution (300 → 1,000 triages/hour)
 
 **What changes:**
 
 ```
-                    ┌─────────────┐
-                    │ Load        │
-                    │ Balancer    │
-                    └──────┬──────┘
-                           │
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
-        ┌──────────┐ ┌──────────┐ ┌──────────┐
-        │ Backend  │ │ Backend  │ │ Backend  │
-        │ Instance │ │ Instance │ │ Instance │
-        │    1     │ │    2     │ │    3     │
-        └────┬─────┘ └────┬─────┘ └────┬─────┘
-             │            │            │
-             └────────────┼────────────┘
-                          ▼
-                   ┌─────────────┐
-                   │ PostgreSQL  │
-                   │ (replaces   │
-                   │  SQLite)    │
-                   └─────────────┘
+Convex Action Pool
+├── Action Worker 1 → ANTHROPIC_API_KEY_1
+├── Action Worker 2 → ANTHROPIC_API_KEY_2
+├── Action Worker 3 → ANTHROPIC_API_KEY_3
+└── Action Worker N → ANTHROPIC_API_KEY_N
 ```
 
-- **Replace SQLite with PostgreSQL** for concurrent write support
-- **Multiple backend instances** behind a load balancer (nginx/Traefik)
-- **Redis task queue** (Celery or ARQ) for async triage processing
-- Each backend instance can process triage jobs independently
+- **Multiple Anthropic API keys** stored as Convex environment variables, rotated across agent invocations
+- **Model downgrade for simpler agents:** Use `claude-haiku-4-5` for the Notifier (message composition is simple) and the first pass of the QA Reviewer; reserve Sonnet 4.6 for Analyzer and Debugger
+- **Caching:** Cache Analyzer results for identical or near-identical incident descriptions using Convex's caching layer — deduplicated incidents skip the Analyzer entirely
+- **Sandbox pooling:** Pre-warm Vercel Sandbox sessions during known peak hours to reduce cold start latency
 
-**Database migration:** SQLAlchemy abstracts the database layer. Switching from SQLite to PostgreSQL requires only changing `DATABASE_URL` in the environment. No code changes needed.
-
-**Why Redis queue:** Decouples incident creation from triage processing. The API returns immediately, and triage workers pick up jobs from the queue. This prevents request timeouts and enables independent scaling of API servers vs. triage workers.
-
-### Phase 3: Agent-Level Parallelism (1,000 → 5,000 incidents/hour)
+### Phase 4: Enterprise Scale (1,000+ triages/hour)
 
 **What changes:**
-- **Parallel sub-agent execution** where possible (Analyzer and Classifier can partially overlap)
-- **Multiple LLM API keys** distributed across triage workers to multiply rate limits
-- **Batch notifications** — aggregate multiple incidents into single Slack messages during high-volume periods
-- **Caching layer** — Redis cache for runbook lookups and repeated error patterns
 
-**Agent optimization:**
-- Use Claude Haiku 4.5 for the Notifier agent (message composition is simpler, doesn't need Sonnet)
-- Pre-classify obvious incidents with a lightweight rule-based filter before invoking LLM agents
-- Cache Analyzer results for duplicate/similar incidents (deduplicated by description similarity)
-
-### Phase 4: Enterprise Scale (5,000+ incidents/hour)
-
-**What changes:**
-- **Kubernetes deployment** with auto-scaling pods per service
-- **Dedicated LLM inference** (Anthropic's batch API or self-hosted models for lower-severity triage)
-- **Event-driven architecture** — replace REST polling with WebSocket/SSE for real-time UI updates
-- **Sharded database** or dedicated read replicas for dashboard queries
-- **Multi-region deployment** for global SRE teams
+- **Convex enterprise plan:** Dedicated Convex deployment with higher throughput limits, SLA guarantees, and isolated compute
+- **Anthropic Batch API:** For non-urgent incidents (Medium/Low severity), use Anthropic's batch API to process multiple incidents in a single batch job — lower cost, higher throughput, asynchronous delivery
+- **Event-driven Linear webhooks:** Replace manual polling of ticket status with Linear → Convex webhook integration for instant resolution detection
+- **Read replicas / caching layer:** For the observability dashboard (read-heavy queries over historical incident data), add a Convex query cache or export to a dedicated analytics store
+- **Multi-region Convex deployment:** For global SRE teams across time zones, Convex's multi-region support can route requests to the nearest deployment
 
 ---
 
 ## Technical Decisions & Trade-offs
 
-### Why SQLite for v1?
+### Why Convex instead of FastAPI + SQLite?
 
-| Consideration | SQLite | PostgreSQL |
-|---------------|--------|------------|
-| Setup complexity | Zero — file-based | Requires separate service |
-| Concurrent reads | Excellent | Excellent |
-| Concurrent writes | Limited (WAL helps) | Excellent |
-| Deployment | Single container | Additional container |
-| Migration path | SQLAlchemy makes it trivial | N/A |
+| Consideration | Convex | FastAPI + SQLite |
+|---------------|--------|-----------------|
+| Real-time updates | Built-in reactive queries | Requires polling or WebSocket layer |
+| Horizontal scaling | Automatic | Manual instances + load balancer |
+| Background jobs | Native scheduled actions | Requires Celery + Redis |
+| Type safety | Zod schema end-to-end (DB → client) | Separate Pydantic + TypeScript types |
+| Auth integration | Clerk SDK native | Manual JWT validation |
+| Setup complexity | Zero infrastructure | Docker orchestration required |
+| File storage | Convex File Storage (built-in) | Local filesystem or S3 |
 
-**Decision:** SQLite for hackathon simplicity. The SQLAlchemy ORM layer ensures a zero-code-change migration to PostgreSQL when scaling.
+**Decision:** Convex eliminates an entire infrastructure layer while providing better real-time UX through reactive queries. The trade-off is vendor lock-in to the Convex platform, which is acceptable given the hackathon timeframe and the platform's production viability.
 
-### Why Background Tasks instead of a Job Queue?
+### Why Vercel Sandbox for Debugging?
 
-| Consideration | FastAPI BackgroundTasks | Celery/Redis Queue |
-|---------------|----------------------|-------------------|
-| Setup | Zero — built into FastAPI | Requires Redis + worker process |
-| Monitoring | Limited | Rich (Flower dashboard, dead letter queues) |
-| Retry logic | Manual implementation | Built-in with configurable policies |
-| Scaling | Tied to web server process | Independent worker scaling |
+| Consideration | Vercel Sandbox | Local exec / Docker exec |
+|---------------|---------------|--------------------------|
+| Isolation | Full — ephemeral, no production access | Risk of agent escaping to host |
+| Setup | API call — no infrastructure | Requires Docker-in-Docker or VM |
+| Security | Network-isolated by default | Requires manual firewalling |
+| Cleanup | Automatic on session end | Requires explicit teardown |
+| Concurrency | Managed by Vercel | Requires container orchestration |
 
-**Decision:** BackgroundTasks for v1. Simple, no additional infrastructure. Upgrade path to Celery/Redis is straightforward — replace `background_tasks.add_task(fn)` with `fn.delay()`.
+**Decision:** Vercel Sandbox is the only safe option for allowing an autonomous agent to execute arbitrary code. The alternative (unrestricted code execution) is unacceptable for a production SRE system. See: https://vercel.com/docs/vercel-sandbox/sdk-reference
 
-### Why Polling instead of WebSockets?
+### Why Real-time Instead of Polling?
 
-| Consideration | Polling (2s interval) | WebSockets |
-|---------------|----------------------|------------|
-| Implementation | 5 lines of `setInterval` | Connection management, reconnection logic |
-| Server load | Slightly higher (repeated requests) | Lower (push-based) |
-| Perceived latency | ≤2 seconds | Near-instant |
-| Debugging | Standard HTTP requests | Requires WS-specific tooling |
-| Scaling | Stateless — works behind any LB | Requires sticky sessions or Redis pub/sub |
+Convex reactive queries push updates to the frontend the instant a Convex mutation occurs. There is no polling interval — state changes appear within ~100ms. This gives a significantly better UX for the agent pipeline trail (users see each step complete in real time) without any additional infrastructure (no WebSocket server, no SSE endpoint, no Redis pub/sub).
 
-**Decision:** Polling for v1. Indistinguishable from real-time for a 15-30 second triage process. WebSockets add complexity without meaningful UX improvement at this scale.
+### Why Sequential Agents (with selective parallelism)?
 
-### Why Sequential Agent Pipeline?
+| Consideration | Fully Sequential | Selective Parallel |
+|---------------|------------------|--------------------|
+| Correctness | Guaranteed full context at each step | Requires careful dependency analysis |
+| Debugging | Linear Langfuse trace | Concurrent spans — slightly harder |
+| Latency | Sum of all agents | Reduced by parallelizing independent steps |
+| Complexity | Minimal | Moderate — need to coordinate futures |
 
-| Consideration | Sequential | Parallel |
-|---------------|-----------|---------|
-| Correctness | Guaranteed — each agent has full context from previous | Risk of stale/incomplete context |
-| Debugging | Linear trace — easy to follow | Concurrent spans — harder to debug |
-| Latency | Sum of all agents (~20s) | Max of parallel agents (~12s) |
-| Complexity | Simple loop | Async coordination, merging results |
+**Decision:** Core analysis pipeline (Analyzer → Ticketer → Debugger → QA) remains sequential because each step depends on the previous output. Notifications are parallelized with debugging because they are independent. This gives most of the latency benefit with minimal coordination complexity.
 
-**Decision:** Sequential for v1. Correctness and debuggability outweigh the ~8 second latency savings. The pipeline is already fast enough (<30s) that parallelism provides marginal UX benefit.
+### Why Not WebSockets / SSE?
+
+Convex's reactive query system is a WebSocket-based push protocol managed entirely by the Convex client SDK. We get all the benefits of WebSockets (instant push, no polling overhead) without writing any WebSocket server code.
 
 ---
 
@@ -157,8 +151,23 @@ The application runs as a single Docker Compose stack with the following charact
 
 | Priority | Bottleneck | Impact | Mitigation |
 |----------|-----------|--------|------------|
-| 1 | LLM API rate limits | Caps triage throughput at ~60/hour | Higher tier, multiple keys, lighter models for simple agents |
-| 2 | SQLite write locking | Blocks concurrent triage DB updates | Switch to PostgreSQL |
-| 3 | Synchronous notifications | Adds latency to each triage | Async notification queue |
-| 4 | Single backend instance | Can't scale horizontally | Load balancer + multiple instances |
-| 5 | Frontend polling | Unnecessary requests during idle time | WebSockets or SSE |
+| 1 | Anthropic API rate limits | Caps pipeline throughput at ~60/hour | Higher tier, multiple keys, Haiku for simple agents |
+| 2 | Vercel Sandbox concurrency | Limits simultaneous autonomous debug sessions | Sandbox session pooling, pre-warming |
+| 3 | Sequential agent pipeline | Adds latency for each step | Parallelize Notifier with Debugger |
+| 4 | Linear API rate limits | Rarely hit at current scale | Request higher tier if needed |
+| 5 | Slack/Discord rate limits | Limits notification burst | Batch notifications during high-volume events |
+
+---
+
+## Cost Model (Approximate)
+
+| Component | Cost at 60 triages/hour | Cost at 1,000 triages/hour |
+|-----------|------------------------|---------------------------|
+| Claude Sonnet 4.6 | ~$1.50/hour (5 calls × 1k tokens avg) | ~$25/hour |
+| Convex (paid plan) | ~$25/month flat | ~$100-300/month |
+| Vercel Sandbox | ~$0.05/session | ~$50/hour at peak |
+| SendGrid (email) | ~$0.001/email | ~$1/hour |
+| Twilio (SMS, Critical only) | ~$0.01/SMS × 10% of volume | ~$1/hour |
+| Linear | Fixed team plan | Fixed team plan |
+
+**Total at baseline:** ~$2-3/hour during peak, ~$30-50/month at moderate usage.
