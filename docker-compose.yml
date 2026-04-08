@@ -1,59 +1,90 @@
 version: "3.8"
 
 services:
-  # === Backend API + Agent ===
+  # ============================================================
+  # Application Services
+  # ============================================================
+
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     container_name: sre-backend
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/sre_agent.db
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - SLACK_CHANNEL=${SLACK_CHANNEL:-#sre-incidents}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - SENDGRID_FROM_EMAIL=${SENDGRID_FROM_EMAIL}
+      - SENDGRID_FROM_NAME=${SENDGRID_FROM_NAME:-SRE Triage Agent}
+      - LANGFUSE_HOST=http://langfuse:3000
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-local}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-local}
     volumes:
       - backend-data:/app/data
-    env_file:
-      - .env
+      - backend-uploads:/app/uploads
     depends_on:
-      - langfuse
+      langfuse:
+        condition: service_started
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
-  # === Frontend UI ===
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+    build: ./frontend
     container_name: sre-frontend
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
+      - "3001:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
     depends_on:
       - backend
     restart: unless-stopped
 
-  # === Langfuse (Observability) ===
+  # ============================================================
+  # Langfuse Observability Stack
+  # ============================================================
+
   langfuse:
     image: langfuse/langfuse:2
     container_name: sre-langfuse
     ports:
-      - "3001:3000"
+      - "3000:3000"
     environment:
       - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
-      - NEXTAUTH_SECRET=change-me-in-production
-      - SALT=change-me-in-production
-      - NEXTAUTH_URL=http://localhost:3001
-      - TELEMETRY_ENABLED=true
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-changeme-secret-at-least-32-chars!!}
+      - NEXTAUTH_URL=http://localhost:3000
+      - SALT=${LANGFUSE_SALT:-changeme-salt-at-least-32-chars!!!!!}
+      - LANGFUSE_INIT_ORG_ID=sre-hackathon
+      - LANGFUSE_INIT_ORG_NAME=SRE Hackathon
+      - LANGFUSE_INIT_PROJECT_ID=sre-triage
+      - LANGFUSE_INIT_PROJECT_NAME=SRE Triage Agent
+      - LANGFUSE_INIT_PROJECT_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-local}
+      - LANGFUSE_INIT_PROJECT_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-local}
+      - LANGFUSE_INIT_USER_EMAIL=admin@sre.local
+      - LANGFUSE_INIT_USER_PASSWORD=admin123
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LANGFUSE_S3_EVENT_UPLOAD_ENABLED=true
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=langfuse
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=http://minio:9000
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=minio
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=miniominio
+      - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=us-east-1
     depends_on:
       langfuse-db:
         condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
     restart: unless-stopped
 
-  # === Langfuse PostgreSQL ===
   langfuse-db:
     image: postgres:16-alpine
     container_name: sre-langfuse-db
@@ -62,7 +93,7 @@ services:
       - POSTGRES_PASSWORD=langfuse
       - POSTGRES_DB=langfuse
     volumes:
-      - langfuse-db-data:/var/lib/postgresql/data
+      - langfuse-pg-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U langfuse"]
       interval: 5s
@@ -70,6 +101,59 @@ services:
       retries: 10
     restart: unless-stopped
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24
+    container_name: sre-clickhouse
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: sre-redis
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio
+    container_name: sre-minio
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minio
+      - MINIO_ROOT_PASSWORD=miniominio
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc
+    container_name: sre-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5 &&
+      mc alias set local http://minio:9000 minio miniominio &&
+      mc mb local/langfuse --ignore-existing &&
+      echo 'Bucket created successfully'
+      "
+    restart: "no"
+
 volumes:
   backend-data:
-  langfuse-db-data:
+  backend-uploads:
+  langfuse-pg-data:
+  clickhouse-data:
+  redis-data:
+  minio-data:
