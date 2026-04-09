@@ -1,167 +1,196 @@
-# SRE Incident Intake & Triage Agent
+# Trusty — SRE AI Agent Platform
 
-An AI-powered **multi-agent SRE system** that automates incident intake, triage, ticketing, and notification for e-commerce applications. Built for the **AgentX Hackathon 2026**.
+An AI-powered **multi-agent SRE system** that automates the full incident response lifecycle for e-commerce applications: intake, analysis, ticketing, notification, autonomous debugging, and QA code review. Built for the **AgentX Hackathon 2026**.
 
 ## Problem
 
-When incidents occur in production e-commerce systems, the manual process of reading reports, classifying severity, assigning teams, and tracking resolution is slow and error-prone. Critical minutes are lost while engineers manually read, categorize, and route each report.
+When incidents occur in production e-commerce systems, the manual process of reading reports, classifying severity, assigning teams, creating tickets, and tracking resolution is slow and error-prone. Critical minutes are lost while engineers manually read, categorize, and route each report.
 
 ## Solution
 
 A multi-agent system that:
 
-1. **Ingests** multimodal incident reports (text + images/logs) via a web UI
-2. **Analyzes** the report using a specialized Analyzer Agent
-3. **Classifies** severity, category, and assigns a team via a Classifier Agent
-4. **Gates critical incidents** through human-in-the-loop approval before escalation
-5. **Creates tickets** with full context via a Ticketer Agent
-6. **Notifies** the engineering team via Slack and email through a Notifier Agent
-7. **Tracks resolution** and notifies the original reporter when the incident is closed
+1. **Ingests** multimodal incident reports (text + images + logs) via a real-time web UI
+2. **Analyzes** the report using a specialized Analyzer Agent (text + vision)
+3. **Gates critical incidents** through human-in-the-loop approval before escalation
+4. **Creates tickets** in Linear with full context via a Ticketer Agent
+5. **Notifies** engineering teams via Slack, Discord, Email, and SMS through a Notifier Agent
+6. **Debugs autonomously** using a Debugger Agent running code in Vercel Sandbox
+7. **Reviews fixes** via a QA Reviewer Agent before marking resolution
+8. **Closes the loop** by notifying the original reporter when the incident is resolved
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     FRONTEND (Next.js :3001)                    │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────┐  ┌──────────┐  │
-│  │Dashboard │  │Incident Form │  │  Detail +  │  │ Tickets  │  │
-│  │  Stats   │  │ (multipart)  │  │  Triage    │  │  List    │  │
-│  └──────────┘  └──────────────┘  │  Progress  │  └──────────┘  │
-│                                   └───────────┘                 │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │ HTTP (REST API)
-┌───────────────────────────▼─────────────────────────────────────┐
-│                     BACKEND (FastAPI :8000)                      │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │                     ORCHESTRATOR                           │  │
-│  │                                                            │  │
-│  │  ┌──────────┐  ┌────────────┐  ┌──────────┐  ┌─────────┐ │  │
-│  │  │ Analyzer │─▶│ Classifier │─▶│ Ticketer │─▶│Notifier │ │  │
-│  │  │  Agent   │  │   Agent    │  │  Agent   │  │  Agent  │ │  │
-│  │  └──────────┘  └─────┬──────┘  └──────────┘  └─────────┘ │  │
-│  │                      │                                     │  │
-│  │              ┌───────▼────────┐                            │  │
-│  │              │ Human-in-Loop  │  (Critical only)           │  │
-│  │              │ Approval Gate  │                             │  │
-│  │              └────────────────┘                            │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  ┌──────────┐  ┌──────────────┐  ┌─────────┐  ┌─────────────┐  │
-│  │  SQLite  │  │   Runbooks   │  │  Slack   │  │  SendGrid   │  │
-│  │    DB    │  │    (JSON)    │  │ Webhook  │  │   Email     │  │
-│  └──────────┘  └──────────────┘  └─────────┘  └─────────────┘  │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ OpenTelemetry
-               ┌───────────▼────────────┐
-               │       Langfuse         │
-               │   (Observability)      │
-               │       :3000            │
-               └────────────────────────┘
+│                    FRONTEND (React 19 + Vite)                   │
+│   TanStack Router · TanStack Query · Tailwind CSS v4 · Clerk   │
+│                                                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │ Incident     │  │ Incident     │  │ Ticket Board +       │  │
+│  │ Report Form  │  │ Detail +     │  │ Notification Feed    │  │
+│  │ (multimodal) │  │ Agent Trail  │  │                      │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ Convex WebSocket (real-time)
+┌────────────────────────────▼────────────────────────────────────┐
+│                     CONVEX BACKEND                              │
+│          (serverless functions + real-time sync + AI)           │
+│                                                                 │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │              Convex AI Agent Component                   │   │
+│  │  (persistent threads, tool calls, message history)       │   │
+│  │                                                          │   │
+│  │  ┌────────────┐  ┌──────────────┐  ┌─────────────────┐  │   │
+│  │  │  Analyzer  │→ │   Ticketer   │→ │    Notifier     │  │   │
+│  │  │   Agent    │  │    Agent     │  │     Agent       │  │   │
+│  │  └────────────┘  └──────────────┘  └─────────────────┘  │   │
+│  │         │                                    │           │   │
+│  │         ▼                                    │           │   │
+│  │  ┌────────────┐  ┌──────────────┐            │           │   │
+│  │  │  Debugger  │→ │  QA / Code   │────────────┘           │   │
+│  │  │   Agent    │  │Review Agent  │                        │   │
+│  │  └────────────┘  └──────────────┘                        │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌──────────┐  ┌──────────────┐  ┌────────┐  ┌────────────┐   │
+│  │  Convex  │  │  Convex File │  │ Clerk  │  │  Langfuse  │   │
+│  │    DB    │  │   Storage    │  │  Auth  │  │  (traces)  │   │
+│  └──────────┘  └──────────────┘  └────────┘  └────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                             │
+          ┌──────────────────┼──────────────────────┐
+          ▼                  ▼                       ▼
+   ┌─────────────┐   ┌──────────────┐      ┌───────────────────┐
+   │   Linear    │   │  Slack /     │      │  Vercel Sandbox   │
+   │  (tickets)  │   │  Discord /   │      │  (safe code exec) │
+   └─────────────┘   │  Email / SMS │      └───────────────────┘
+                      └──────────────┘
 ```
 
 ### Multi-Agent Pipeline
 
 | Agent | Role | Tools |
 |-------|------|-------|
-| **Orchestrator** | Coordinates pipeline, manages state, human-in-the-loop | Python orchestration (no LLM tools) |
-| **Analyzer** | Analyzes incident text, logs, and images | `extract_error_patterns`, `analyze_screenshot` |
-| **Classifier** | Classifies severity/category/team, consults runbooks | `lookup_runbook`, `classify_incident` |
-| **Ticketer** | Creates structured tickets with full context | `create_ticket` |
-| **Notifier** | Sends Slack and email notifications | `send_slack_notification`, `send_email_notification`, `record_notification` |
+| **Orchestrator** | Coordinates pipeline, manages state, human-in-the-loop gates | Convex actions (sequential sub-agent invocation) |
+| **Analyzer** | Multimodal analysis of text, logs, and images | `extract_error_patterns`, `analyze_image`, `lookup_known_issue` |
+| **Ticketer** | Creates Linear tickets with full context | `create_linear_ticket`, `update_incident_record` |
+| **Notifier** | Multi-channel notifications (Slack, Discord, Email, SMS) | `send_slack_message`, `send_discord_message`, `send_email`, `send_sms` |
+| **Debugger** | Autonomous fix in Vercel Sandbox | `create_sandbox`, `run_in_sandbox`, `destroy_sandbox` |
+| **QA Reviewer** | Reviews proposed fix, approves or rejects | `analyze_code_changes`, `check_regression_risk` |
 
 ### Pipeline Flow
 
 ```
 Incident submitted
     → Analyzer (text + logs + images)
-        → Classifier (severity / category / team)
-            → [If Critical: Human Approval Gate]
-                → Ticketer (SRE-XXXX)
-                    → Notifier (Slack + Email)
-                        → Triage Report + Timeline generated
+        → [If Critical: Human Approval Gate]
+            → Ticketer (Linear ticket)
+                → Notifier (Slack + Discord + Email + SMS)
+                    → Debugger (Vercel Sandbox fix)
+                        → QA Reviewer (approve/reject)
+                            → [If rejected: retry Debugger, max 3 cycles]
+                            → Resolution Notifications
 ```
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|-----------|
-| Frontend | Next.js (App Router) + Tailwind CSS |
-| Backend | Python 3.12 + FastAPI |
-| Agent Framework | Anthropic Claude API (tool use) |
-| LLM | Claude Sonnet 4.6 (`claude-sonnet-4-6`) |
-| Database | SQLite (via SQLAlchemy async) |
-| Observability | Langfuse (self-hosted) + OpenTelemetry |
-| Notifications | Slack Webhooks + SendGrid Email |
-| Containerization | Docker Compose |
+| Frontend | React 19 + Vite 7 + TanStack Start (Router / Query / Form) |
+| Styling | Tailwind CSS v4 + shadcn/ui + Radix UI |
+| Auth | Clerk (React SDK + JWT) |
+| Backend | Convex (serverless DB + functions + real-time sync) |
+| AI Agents | Convex AI Agent Component + Claude Sonnet 4.6 |
+| LLM | Claude Sonnet 4.6 (`claude-sonnet-4-6`) — multimodal |
+| Ticketing | Linear API |
+| Notifications | Slack Webhooks, Discord Webhooks, Resend Email, Twilio SMS |
+| Sandbox | Vercel Sandbox SDK (isolated code execution) |
+| Observability | Langfuse (LLM traces, token usage, latency) |
+| Validation | Zod v4 (schema validation end-to-end) |
+| Linter / Formatter | Biome |
+| Package Manager | pnpm |
 
 ## Quick Start
+
+### Local Development
 
 ```bash
 git clone https://github.com/alexlombana9/SRE-Agent-Hackathon-2026.git
 cd SRE-Agent-Hackathon-2026
-cp .env.example .env
-# Edit .env with your API keys (Anthropic, Slack, SendGrid)
-docker compose up --build
+pnpm install
+
+# Configure environment
+cp .env.local.example .env.local
+# Edit .env.local with your Convex URL and Clerk key
+
+# Start Convex dev server + frontend concurrently
+pnpm dev
 ```
 
 | Service | URL |
 |---------|-----|
-| Frontend | http://localhost:3001 |
-| Backend API | http://localhost:8000/docs |
-| Langfuse | http://localhost:3000 |
+| Frontend | http://localhost:3000 |
+| Convex Dashboard | https://dashboard.convex.dev |
+| Langfuse | https://cloud.langfuse.com (or self-hosted) |
 
-See [QUICKGUIDE.md](./QUICKGUIDE.md) for detailed step-by-step instructions.
+See [QUICKGUIDE.md](./QUICKGUIDE.md) for detailed step-by-step instructions including all API key setup.
 
 ## Repository Structure
 
 ```
-├── backend/                     # Python FastAPI + Multi-Agent system
-│   ├── app/
-│   │   ├── main.py              # FastAPI app, CORS, lifespan
-│   │   ├── config.py            # Pydantic Settings (env vars)
-│   │   ├── database.py          # SQLAlchemy async engine
-│   │   ├── models.py            # ORM models (Incident, Ticket, Notification)
-│   │   ├── schemas.py           # Pydantic request/response schemas
-│   │   ├── api/                 # REST API endpoints
-│   │   ├── agent/               # Multi-agent system
-│   │   │   ├── orchestrator.py  # Pipeline coordinator
-│   │   │   ├── analyzer.py      # Incident analysis agent
-│   │   │   ├── classifier.py    # Severity/category classifier agent
-│   │   │   ├── ticketer.py      # Ticket creation agent
-│   │   │   ├── notifier.py      # Notification dispatch agent
-│   │   │   ├── prompts.py       # System prompts per agent
-│   │   │   ├── tools.py         # Tool definitions
-│   │   │   └── runbooks.json    # Known issue knowledge base
-│   │   ├── services/            # Business logic (CRUD, files)
-│   │   └── security/            # Input sanitization, prompt injection defense
-│   ├── tests/
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend/                    # Next.js incident management UI
-│   ├── src/
-│   │   ├── app/                 # App Router pages
-│   │   ├── components/          # React components
-│   │   ├── lib/                 # API client, types
-│   │   └── hooks/               # React hooks
-│   ├── Dockerfile
-│   └── package.json
-├── docker-compose.yml           # Full stack orchestration
-├── .env.example                 # Environment variable template
-├── CLAUDE.md                    # Project context for Claude
+├── convex/                      # Convex backend (serverless DB + functions)
+│   ├── schema.ts                # Database schema (Zod-typed tables)
+│   ├── index.ts                 # Core utilities (zQuery, zMutation, zodTable)
+│   ├── auth.ts                  # Auth helpers (getCurrentUser, requireRole)
+│   ├── auth.config.ts           # Clerk authentication config
+│   ├── config.ts                # Error response config
+│   ├── users.ts                 # User management (CRUD, RBAC)
+│   ├── http.ts                  # HTTP action handlers (webhooks)
+│   └── agents/                  # Agent implementations (planned)
+│
+├── src/                         # React 19 frontend (Vite)
+│   ├── routes/                  # TanStack Router file-based routes
+│   │   ├── __root.tsx           # Root layout (Clerk + Convex + Query providers)
+│   │   ├── index.tsx            # Auth redirect
+│   │   ├── sign-in.tsx          # Clerk sign-in page
+│   │   ├── _authenticated.tsx   # Protected layout (auth guard)
+│   │   └── demo/                # Demo pages (Convex, forms, query)
+│   ├── components/              # Shared UI components
+│   │   ├── Header.tsx           # Navigation header
+│   │   ├── Footer.tsx           # Footer
+│   │   ├── ThemeToggle.tsx      # Light/dark/auto theme
+│   │   └── ui/                  # shadcn/ui component library
+│   ├── integrations/            # Provider wrappers (Convex, TanStack Query)
+│   ├── hooks/                   # React hooks
+│   ├── lib/                     # Utilities (query client, env validation)
+│   └── styles.css               # Tailwind CSS v4 entry point
+│
+├── .claude/
+│   ├── agents/                  # Agent specifications (markdown)
+│   │   ├── orchestrator.md
+│   │   ├── analyzer.md
+│   │   ├── classifier.md
+│   │   ├── ticketer.md
+│   │   └── notifier.md
+│   └── skills/                  # Claude Code development skills
+│
+├── context/                     # Hackathon reference documents
+├── PROJECT.md                   # Complete technical specification
 ├── AGENTS_USE.md                # Agent documentation (hackathon deliverable)
 ├── SCALING.md                   # Scalability analysis
-├── QUICKGUIDE.md                # Step-by-step run & test guide
-├── README.md                    # This file
-└── LICENSE                      # MIT
+├── QUICKGUIDE.md                # Setup and test instructions
+├── CLAUDE.md                    # Project context for Claude Code
+└── README.md                    # This file
 ```
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
+| [PROJECT.md](./PROJECT.md) | Complete technical specification and architecture details |
 | [AGENTS_USE.md](./AGENTS_USE.md) | Multi-agent architecture, use cases, observability, and security |
-| [SCALING.md](./SCALING.md) | Scalability analysis, assumptions, and technical decisions |
+| [SCALING.md](./SCALING.md) | Scalability analysis, bottlenecks, and cost model |
 | [QUICKGUIDE.md](./QUICKGUIDE.md) | Step-by-step instructions to run and test the application |
 
 ## AgentX Hackathon 2026

@@ -1,40 +1,63 @@
-services:
-  backend:
-    build: ./backend
-    container_name: sre-backend
-    ports:
-      - "8000:8000"
-    environment:
-      - DATABASE_URL=sqlite+aiosqlite:///./data/sre_agent.db
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
-      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
-      - SLACK_CHANNEL=${SLACK_CHANNEL:-#sre-incidents}
-      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
-      - SENDGRID_FROM_EMAIL=${SENDGRID_FROM_EMAIL}
-      - SENDGRID_FROM_NAME=${SENDGRID_FROM_NAME:-SRE Triage Agent}
-      - LANGFUSE_HOST=http://langfuse:3000
-      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-local}
-      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-local}
-    volumes:
-      - backend-data:/app/data
-      - backend-uploads:/app/uploads
-    depends_on:
-      langfuse:
-        condition: service_started
-    restart: unless-stopped
+# ==============================================================================
+# Trusty SRE AI Agent Platform — Docker Compose
+# ==============================================================================
+#
+# NOTE: The primary development workflow uses `pnpm dev` which runs Vite +
+# Convex dev server locally. Docker Compose is provided for self-hosting
+# Langfuse observability alongside the frontend.
+#
+# The Convex backend runs as a managed service (https://dashboard.convex.dev)
+# and does not need a container.
+#
+# Usage:
+#   cp .env.local.example .env.local
+#   docker compose up --build
+#
+# ==============================================================================
 
+services:
   frontend:
-    build: ./web
-    container_name: sre-frontend
+    build: .
+    container_name: trusty-frontend
     ports:
       - "3000:3000"
     environment:
-      - VITE_API_URL=http://localhost:8000/api/v1
+      - VITE_CONVEX_URL=${VITE_CONVEX_URL}
+      - VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
+    restart: unless-stopped
+
+  # Langfuse — LLM Observability (self-hosted, optional)
+  # Remove this service if using Langfuse Cloud (https://cloud.langfuse.com)
+  langfuse:
+    image: langfuse/langfuse:latest
+    container_name: trusty-langfuse
+    ports:
+      - "3001:3000"
+    environment:
+      - NEXTAUTH_URL=http://localhost:3001
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-changeme-secret-at-least-32-chars}
+      - SALT=${LANGFUSE_SALT:-changeme-salt-at-least-32-chars}
+      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
     depends_on:
-      - backend
+      langfuse-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  langfuse-db:
+    image: postgres:16-alpine
+    container_name: trusty-langfuse-db
+    environment:
+      - POSTGRES_USER=langfuse
+      - POSTGRES_PASSWORD=langfuse
+      - POSTGRES_DB=langfuse
+    volumes:
+      - langfuse-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
 volumes:
-  backend-data:
-  backend-uploads:
+  langfuse-data:

@@ -28,14 +28,14 @@ model: claude-sonnet-4-6
 
 | Input | Source | Format |
 |-------|--------|--------|
-| incident_id | FastAPI background task | string (UUID) |
-| Incident data | SQLite DB | Incident model (title, description, reporter, attachments, logs) |
+| incident_id | Convex action trigger | string (Convex ID) |
+| Incident data | Convex DB | Incident record (title, description, reporter, attachments, logs) |
 
 ## Outputs
 
 | Output | Destination | Format |
 |--------|-------------|--------|
-| Updated incident | SQLite DB | Incident with severity, category, team, analysis, fix |
+| Updated incident | Convex DB | Incident with severity, category, team, analysis, fix |
 | Triage Report | DB (agent_analysis field) | Markdown document |
 | Incident Timeline | DB (JSON in timeline field) | Array of {timestamp, agent, action, details} |
 | Trace | Langfuse | Full trace with spans per sub-agent |
@@ -105,7 +105,7 @@ END
 
 ## State Management
 
-State is persisted in the SQLite database. The orchestrator updates the incident record at each step:
+State is persisted in Convex DB. The orchestrator updates the incident record at each step:
 - `status`: Current pipeline stage
 - `severity`, `category`, `assigned_team`: Set after classification
 - `agent_analysis`: Set at end with full triage report
@@ -113,4 +113,4 @@ State is persisted in the SQLite database. The orchestrator updates the incident
 
 ## Implementation File
 
-`backend/app/agent/orchestrator.py`
+`convex/agents/orchestrator.ts`

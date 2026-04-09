@@ -101,19 +101,19 @@ Convex Action Pool
 
 ## Technical Decisions & Trade-offs
 
-### Why Convex instead of FastAPI + SQLite?
+### Why Convex?
 
-| Consideration | Convex | FastAPI + SQLite |
-|---------------|--------|-----------------|
-| Real-time updates | Built-in reactive queries | Requires polling or WebSocket layer |
-| Horizontal scaling | Automatic | Manual instances + load balancer |
-| Background jobs | Native scheduled actions | Requires Celery + Redis |
-| Type safety | Zod schema end-to-end (DB → client) | Separate Pydantic + TypeScript types |
-| Auth integration | Clerk SDK native | Manual JWT validation |
-| Setup complexity | Zero infrastructure | Docker orchestration required |
-| File storage | Convex File Storage (built-in) | Local filesystem or S3 |
+| Consideration | Benefit |
+|---------------|---------|
+| Real-time updates | Built-in reactive queries — no polling or WebSocket layer needed |
+| Horizontal scaling | Automatic — no manual instances or load balancers |
+| Background jobs | Native scheduled actions — no separate job queue infrastructure |
+| Type safety | Zod schema end-to-end (DB → client) — single source of truth |
+| Auth integration | Clerk SDK native — seamless JWT handling |
+| Setup complexity | Zero infrastructure — fully managed serverless platform |
+| File storage | Convex File Storage built-in — no external object storage |
 
-**Decision:** Convex eliminates an entire infrastructure layer while providing better real-time UX through reactive queries. The trade-off is vendor lock-in to the Convex platform, which is acceptable given the hackathon timeframe and the platform's production viability.
+**Decision:** Convex provides the entire backend as a single managed platform, eliminating an entire infrastructure layer while delivering better real-time UX through reactive queries. The trade-off is vendor lock-in to the Convex platform, which is acceptable given the hackathon timeframe and the platform's production viability.
 
 ### Why Vercel Sandbox for Debugging?
 

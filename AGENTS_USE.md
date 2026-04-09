@@ -6,7 +6,7 @@
 
 **Agent Name:** Trusty SRE Multi-Agent System
 **Purpose:** End-to-end automation of incident intake, analysis, ticketing (Linear), multi-channel notification (Slack, Discord, Email, SMS), autonomous debugging via Vercel Sandbox, and AI-driven QA code review. Reduces incident response time from minutes to under 60 seconds for the triage phase, and provides an autonomous fix attempt within minutes of the report.
-**Tech Stack:** React 19 + Vite, Convex (AI Agent Component), Claude Sonnet 4.6, Clerk, Linear, Slack/Discord/SendGrid/Twilio, Vercel Sandbox SDK, Langfuse, Zod, TanStack Router/Query
+**Tech Stack:** React 19 + Vite, Convex (AI Agent Component), Claude Sonnet 4.6, Clerk, Linear, Slack/Discord/Resend/Twilio, Vercel Sandbox SDK, Langfuse, Zod, TanStack Router/Query
 
 ---
 
@@ -249,7 +249,7 @@
 
 - **Auth:** All Convex mutations require a valid Clerk session (JWT-verified server-side). Agent actions run server-side only — no API keys are exposed to the client.
 
-- **Data handling:** All secrets (Anthropic, Linear, Slack, Discord, SendGrid, Twilio, Vercel) stored as Convex environment variables. Never in client code or version control. Reporter PII (email, phone) is stored only for notification purposes and never logged to Langfuse traces.
+- **Data handling:** All secrets (Anthropic, Linear, Slack, Discord, Resend, Twilio, Vercel) stored as Convex environment variables. Never in client code or version control. Reporter PII (email, phone) is stored only for notification purposes and never logged to Langfuse traces.
 
 ### Evidence
 

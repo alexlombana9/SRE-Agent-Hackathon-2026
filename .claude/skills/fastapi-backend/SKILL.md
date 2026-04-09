@@ -1,108 +1,161 @@
 ---
-name: fastapi-backend
+name: convex-backend
 description: >
-  Patterns and conventions for the FastAPI backend of the SRE Triage Agent.
-  Trigger: When working with backend code, API endpoints, database models, or services.
+  Patterns and conventions for the Convex backend of the SRE Triage Agent.
+  Trigger: When working with backend code, Convex functions, database operations, or services.
 metadata:
   author: alexlombana9
-  version: "1.0"
+  version: "2.0"
 ---
 
 ## When to Use
 
 Load this skill when:
-- Creating or modifying FastAPI endpoints in `backend/app/api/`
-- Working with SQLAlchemy models or database operations
-- Creating Pydantic schemas for request/response validation
-- Implementing business logic services in `backend/app/services/`
+- Creating or modifying Convex queries, mutations, or actions in `convex/`
+- Working with the Zod-typed schema in `convex/schema.ts`
+- Implementing agent logic in `convex/agents/`
+- Adding HTTP action handlers in `convex/http.ts`
 
 ## Critical Patterns
 
-### Pattern 1: Async Endpoint with DB Session
+### Pattern 1: Zod-Validated Query
 
-All endpoints use async and receive the DB session via dependency injection.
+All queries and mutations use `zQuery`/`zMutation` wrappers with Zod argument validation.
 
-```python
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+```typescript
+import { z } from "zod"
+import { zQuery } from "."
 
-from app.database import get_db
-from app.schemas import IncidentDetail
-
-router = APIRouter()
-
-@router.get("/{incident_id}", response_model=IncidentDetail)
-async def get_incident(incident_id: str, db: AsyncSession = Depends(get_db)):
-    incident = await incident_service.get_incident(db, incident_id)
-    if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
+export const getIncident = zQuery({
+  args: z.object({ id: z.string().describe("Convex Id<incidents>") }),
+  handler: async (ctx, args) => {
+    const id = args.id as Id<"incidents">
+    const incident = await ctx.db.get(id)
+    if (!incident) throw new ConvexError(config.errors.notFound)
     return incident
+  },
+})
 ```
 
-### Pattern 2: Service Layer with AsyncSession
+### Pattern 2: Zod-Validated Mutation with Auth
 
-All database operations go through service functions, never directly in endpoints.
+All mutations that modify data require authentication.
 
-```python
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Incident
+```typescript
+import { ConvexError } from "convex/values"
+import { z } from "zod"
+import { zMutation } from "."
+import { requireUser } from "./auth"
 
-async def get_incident(db: AsyncSession, incident_id: str) -> Incident | None:
-    stmt = select(Incident).where(Incident.id == incident_id)
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
+export const createIncident = zMutation({
+  args: z.object({
+    title: z.string().min(5).max(200),
+    description: z.string().min(10).max(10000),
+    severity: z.enum(["critical", "high", "medium", "low"]),
+    category: z.enum(["payment", "checkout", "inventory", "auth", "performance", "infra", "other"]),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx)
+    return ctx.db.insert("incidents", {
+      ...args,
+      status: "submitted",
+      reporterUserId: user._id,
+    })
+  },
+})
 ```
 
-### Pattern 3: Background Tasks for Async Processing
+### Pattern 3: Actions for External API Calls
 
-Long-running operations (like agent triage) use FastAPI BackgroundTasks.
+Use `zAction` for operations that call external services (Anthropic, Linear, Slack, etc.).
 
-```python
-from fastapi import BackgroundTasks
+```typescript
+import { zAction } from "."
+import { z } from "zod"
 
-@router.post("/", status_code=201)
-async def create_incident(
-    data: IncidentCreate,
-    background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
-):
-    incident = await incident_service.create_incident(db, **data.model_dump())
-    background_tasks.add_task(run_triage, incident.id)
-    return incident
+export const runAnalyzer = zAction({
+  args: z.object({ incidentId: z.string() }),
+  handler: async (ctx, args) => {
+    // Read incident data via internal query
+    const incident = await ctx.runQuery(internal.incidents.get, { id: args.incidentId })
+
+    // Call external API (Anthropic)
+    const analysis = await callAnthropicAPI(incident)
+
+    // Write result back via internal mutation
+    await ctx.runMutation(internal.incidents.updateAnalysis, {
+      id: args.incidentId,
+      analysis,
+    })
+
+    return analysis
+  },
+})
+```
+
+### Pattern 4: Scheduled Actions for Pipeline
+
+Use `ctx.scheduler` to chain agent steps without blocking.
+
+```typescript
+// In orchestrator action:
+await ctx.scheduler.runAfter(0, internal.agents.runAnalyzer, { incidentId })
+// The analyzer, when done, schedules the next step:
+await ctx.scheduler.runAfter(0, internal.agents.runTicketer, { incidentId })
 ```
 
 ## Anti-Patterns
 
-### Don't: Sync database operations
+### Don't: Call external APIs in queries or mutations
 
-```python
-# Bad - DON'T do this
-@router.get("/{id}")
-def get_incident(id: str):
-    with Session() as db:
-        return db.query(Incident).get(id)
+```typescript
+// Bad - external calls in mutation
+export const create = zMutation({
+  handler: async (ctx, args) => {
+    await fetch("https://api.slack.com/...") // External calls not allowed here!
+  },
+})
+
+// Good - use an action instead
+export const notifySlack = zAction({
+  handler: async (ctx, args) => {
+    await fetch("https://api.slack.com/...") // Actions can call external APIs
+  },
+})
 ```
 
-### Don't: Business logic directly in endpoints
+### Don't: Skip auth checks on mutations
 
-```python
-# Bad - DON'T do this
-@router.post("/")
-async def create(data: IncidentCreate, db: AsyncSession = Depends(get_db)):
-    incident = Incident(**data.model_dump())
-    db.add(incident)
-    await db.commit()  # Logic should be in service layer
-    return incident
+```typescript
+// Bad - no auth
+export const deleteIncident = zMutation({
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.id) // Anyone can delete!
+  },
+})
+
+// Good - require auth
+export const deleteIncident = zMutation({
+  handler: async (ctx, args) => {
+    await requireRole(ctx, ["admin"])
+    await ctx.db.delete(args.id)
+  },
+})
 ```
 
 ## Quick Reference
 
 | Task | Pattern |
 |------|---------|
-| Get DB session | `db: AsyncSession = Depends(get_db)` |
-| Return 404 | `raise HTTPException(status_code=404, detail="...")` |
-| Background task | `background_tasks.add_task(fn, *args)` |
-| Multipart upload | `file: UploadFile = File(...)` |
-| Query params | `status: str \| None = Query(None)` |
-| Pagination | `page: int = Query(1, ge=1), per_page: int = Query(20, ge=1, le=100)` |
+| Read by ID | `ctx.db.get(id)` |
+| Query with index | `ctx.db.query("table").withIndex("by_field", q => q.eq("field", val)).first()` |
+| Insert | `ctx.db.insert("table", { ...data })` |
+| Update | `ctx.db.patch(id, { ...updates })` |
+| Delete | `ctx.db.delete(id)` |
+| List all | `ctx.db.query("table").collect()` |
+| Ordered | `ctx.db.query("table").order("desc").collect()` |
+| Auth check | `await requireUser(ctx)` |
+| Role check | `await requireRole(ctx, ["admin"])` |
+| Schedule action | `ctx.scheduler.runAfter(delayMs, actionRef, args)` |
+| Call internal query from action | `ctx.runQuery(internal.module.fn, args)` |
+| Call internal mutation from action | `ctx.runMutation(internal.module.fn, args)` |

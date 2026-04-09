@@ -201,7 +201,7 @@ All state transitions are persisted in Convex and streamed in real-time to the f
 
 ### Why Convex?
 
-Convex replaces the entire backend stack (FastAPI + SQLite + background workers) with a single platform. Real-time reactivity is built-in — when an agent updates incident state, the frontend reflects it instantly without polling. The Convex AI Agent Component handles agent thread management, tool call routing, and message history persistence natively.
+Convex provides the entire backend as a single managed platform: serverless functions, real-time database, file storage, and scheduled actions. Real-time reactivity is built-in — when an agent updates incident state, the frontend reflects it instantly without polling. The Convex AI Agent Component handles agent thread management, tool call routing, and message history persistence natively.
 
 ### Why Vercel Sandbox?
 

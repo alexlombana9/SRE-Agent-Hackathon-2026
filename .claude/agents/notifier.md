@@ -2,7 +2,7 @@
 name: notifier
 description: >
   Notifier agent that sends notifications to relevant stakeholders via
-  Slack webhooks and SendGrid email based on triage results.
+  Slack webhooks and Resend email based on triage results.
 type: sub-agent
 model: claude-sonnet-4-6
 ---
@@ -10,7 +10,7 @@ model: claude-sonnet-4-6
 ## Agent Overview
 
 **Agent Name:** Notifier
-**Role:** Enviar notificaciones a stakeholders via Slack y email
+**Role:** Enviar notificaciones a stakeholders via Slack, Discord, Email y SMS
 **Type:** Autonomous
 **LLM:** Claude Sonnet 4.6
 
@@ -19,8 +19,10 @@ model: claude-sonnet-4-6
 1. Determinar quién debe ser notificado basándose en severidad y equipo
 2. Componer mensajes apropiados para cada canal (Slack Block Kit, email HTML)
 3. Enviar notificaciones via Slack webhook
-4. Enviar notificaciones via SendGrid email
-5. Registrar el estado de cada notificación en la DB
+4. Enviar notificaciones via Discord webhook
+5. Enviar notificaciones via Resend email
+6. Enviar notificaciones via Twilio SMS (solo para incidentes Critical)
+7. Registrar el estado de cada notificación en Convex DB
 
 ## Inputs
 
@@ -91,7 +93,9 @@ model: claude-sonnet-4-6
 | Tool | Description | Input | Output |
 |------|-------------|-------|--------|
 | `send_slack_notification` | Send a message to a Slack channel via webhook | `{channel, message_blocks, message_type}` | `{status: "sent"\|"failed", error?: string}` |
-| `send_email_notification` | Send an email via SendGrid | `{to, subject, html_body, message_type}` | `{status: "sent"\|"failed", error?: string}` |
+| `send_discord_notification` | Send a message to Discord via webhook | `{webhook_url, message, message_type}` | `{status: "sent"\|"failed", error?: string}` |
+| `send_email_notification` | Send an email via Resend | `{to, subject, html_body, message_type}` | `{status: "sent"\|"failed", error?: string}` |
+| `send_sms_notification` | Send SMS via Twilio (Critical only) | `{to, body}` | `{status: "sent"\|"failed", error?: string}` |
 | `record_notification` | Save notification record to DB | `{incident_id, ticket_id, channel, recipient, message_type, subject, body, status}` | `{notification_id}` |
 
 ## System Prompt
@@ -120,4 +124,4 @@ Compose messages that are clear, concise, and include:
 
 ## Implementation File
 
-`backend/app/agent/notifier.py`
+`convex/agents/notifier.ts`

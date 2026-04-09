@@ -6,15 +6,16 @@ Step-by-step instructions to run and test **Trusty** — the SRE AI Agent platfo
 
 ## Prerequisites
 
-- **Docker** and **Docker Compose** installed ([Install Docker](https://docs.docker.com/get-docker/))
-- **Node.js 20+** and **pnpm** (only needed for local development without Docker)
-- **API Keys** — see Step 2 below:
+- **Node.js 20+** and **pnpm** installed
+- **Convex account** — free at https://dashboard.convex.dev
+- **Clerk account** — free at https://dashboard.clerk.com
+- **API Keys** — see table below:
 
 | Service | Purpose | Where to get it |
 |---------|---------|----------------|
-| Anthropic | LLM (Claude Sonnet 4.6) | https://console.anthropic.com |
 | Convex | Backend DB + functions | https://dashboard.convex.dev |
 | Clerk | Authentication | https://dashboard.clerk.com |
+| Anthropic | LLM (Claude Sonnet 4.6) | https://console.anthropic.com |
 | Linear | Ticketing | https://linear.app/settings/api |
 | Slack | Incident notifications | https://api.slack.com/messaging/webhooks |
 | Discord | Incident notifications | https://discord.com/developers/docs/resources/webhook |
@@ -23,37 +24,52 @@ Step-by-step instructions to run and test **Trusty** — the SRE AI Agent platfo
 | Langfuse | LLM observability | https://cloud.langfuse.com or self-hosted |
 | Vercel | Sandbox SDK (autonomous debugging) | https://vercel.com/docs/vercel-sandbox/sdk-reference |
 
-> **Note:** SMS (Twilio) is only triggered for Critical incidents. All other notification channels are required.
-> Slack and Discord can each be set to a test webhook for local development.
+> **Note:** SMS (Twilio) is only triggered for Critical incidents. Slack and Discord can each use a test webhook for local development.
 
 ---
 
 ## 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-team/trusty-sre-agent.git
-cd trusty-sre-agent
+git clone https://github.com/alexlombana9/SRE-Agent-Hackathon-2026.git
+cd SRE-Agent-Hackathon-2026
 ```
 
-## 2. Configure Environment Variables
+## 2. Install Dependencies
 
 ```bash
-cp .env.example .env
+pnpm install
 ```
 
-Edit `.env` and fill in your API keys:
+## 3. Configure Convex
+
+```bash
+# Initialize Convex (creates a new project or links to existing)
+npx convex dev
+```
+
+This will prompt you to log in and select/create a Convex project. The dev server will start and deploy your schema and functions.
+
+## 4. Configure Frontend Environment
+
+```bash
+cp .env.local.example .env.local
+```
+
+Edit `.env.local` with your values:
+
+```env
+VITE_CONVEX_URL=https://your-deployment.convex.cloud
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
+```
+
+## 5. Configure Backend Environment (Convex Dashboard)
+
+Go to **https://dashboard.convex.dev** → your project → **Settings** → **Environment Variables** and add:
 
 ```env
 # LLM
 ANTHROPIC_API_KEY=sk-ant-your-key-here
-
-# Convex
-CONVEX_DEPLOYMENT=your-deployment-slug    # e.g. happy-animal-123
-CONVEX_URL=https://happy-animal-123.convex.cloud
-
-# Clerk
-CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
 
 # Linear
 LINEAR_API_KEY=lin_api_...
@@ -69,9 +85,9 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR/WEBHOOK
 
 # Resend
 RESEND_API_KEY=re_your-resend-api-key
-RESEND_FROM_EMAIL=your-verified-sender@example.com
+RESEND_FROM_EMAIL=sre-agent@yourdomain.com
 
-# Twilio (Critical SMS only)
+# Twilio (optional — Critical SMS only)
 TWILIO_ACCOUNT_SID=ACxxxxx
 TWILIO_AUTH_TOKEN=your-auth-token
 TWILIO_FROM_NUMBER=+1234567890
@@ -86,34 +102,41 @@ LANGFUSE_HOST=https://cloud.langfuse.com
 VERCEL_TOKEN=your-vercel-token
 ```
 
-## 3. Start the Application
+See `.env.example` for a complete reference of all variables.
+
+## 6. Configure Clerk Authentication
+
+1. Go to https://dashboard.clerk.com and create an application
+2. Copy the **Publishable Key** into `.env.local` as `VITE_CLERK_PUBLISHABLE_KEY`
+3. In Clerk dashboard, add your Convex deployment URL to the allowed origins
+4. In Convex dashboard, set `CLERK_FRONTEND_API_URL` environment variable to your Clerk frontend API URL
+
+## 7. Start the Application
 
 ```bash
-docker compose up --build
+# Start both frontend and Convex dev server
+pnpm dev
 ```
 
-Wait for all services to be ready. You'll see logs from:
-- `trusty-frontend` — React frontend on port **3000**
-- `trusty-convex` — Convex dev server on port **3210**
-- `trusty-langfuse` — Langfuse observability on port **3001** (if self-hosting)
+You'll see logs from:
+- **Vite** — React frontend on port **3000**
+- **Convex** — dev server syncing schema and functions
 
-## 4. Access the Services
+## 8. Access the Services
 
 | Service | URL | Description |
 |---------|-----|-------------|
 | Frontend | http://localhost:3000 | Incident management UI |
 | Convex Dashboard | https://dashboard.convex.dev | DB, logs, function inspector |
-| Langfuse (self-hosted) | http://localhost:3001 | LLM observability dashboard |
-
-**Langfuse default credentials (self-hosted):** `admin@trusty.local` / `admin123`
+| Langfuse | https://cloud.langfuse.com | LLM observability dashboard |
 
 ---
 
-## 5. Test the Application
+## 9. Test the Application
 
 ### Test 1: Submit a Standard Incident (via UI)
 
-1. Open http://localhost:3000 and sign in
+1. Open http://localhost:3000 and sign in via Clerk
 2. Click **"Report Incident"**
 3. Fill in the form:
    - **Title:** `Payment gateway timeout on checkout`
@@ -139,25 +162,17 @@ Wait for all services to be ready. You'll see logs from:
 ### Test 2: Submit via API (Convex HTTP Action)
 
 ```bash
-curl -X POST http://localhost:3210/api/incidents \
+curl -X POST https://your-deployment.convex.cloud/api/incidents \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_CLERK_TOKEN" \
   -d '{
     "title": "Product search returning empty results",
-    "description": "Search is broken — users get zero results for any query. Issue started after the 2 AM deployment. The search index may need rebuilding.",
+    "description": "Search is broken — users get zero results for any query. Issue started after the 2 AM deployment.",
     "severity": "medium",
     "category": "other",
     "reporterName": "John Smith",
     "reporterEmail": "john@example.com"
   }'
-```
-
-Check the incident status:
-
-```bash
-# Replace {id} with the incident ID returned above
-curl http://localhost:3210/api/incidents/{id} \
-  -H "Authorization: Bearer YOUR_CLERK_TOKEN"
 ```
 
 ### Test 3: Critical Incident with Human-in-the-Loop
@@ -204,7 +219,7 @@ curl http://localhost:3210/api/incidents/{id} \
 
 ### Test 7: Check Observability
 
-1. Open Langfuse at http://localhost:3001 (or https://cloud.langfuse.com)
+1. Open Langfuse at https://cloud.langfuse.com (or your self-hosted instance)
 2. Navigate to **Traces**
 3. Click on a triage trace to see:
    - Full pipeline timeline: Orchestrator → Analyzer → Ticketer → Notifier → Debugger → QA
@@ -215,34 +230,29 @@ curl http://localhost:3210/api/incidents/{id} \
 
 ---
 
-## 6. Stop the Application
+## 10. Stop the Application
 
-```bash
-docker compose down
-```
-
-To also remove volumes (Convex data, Langfuse data):
-
-```bash
-docker compose down -v
-```
+Press `Ctrl+C` in the terminal running `pnpm dev`.
 
 ---
 
-## Local Development (without Docker)
+## Alternative Commands
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Start Convex dev server + frontend concurrently
-pnpm dev
-
-# Frontend only
+# Frontend only (requires Convex dev server running separately)
 pnpm dev:web
 
-# Convex only
+# Convex dev server only
 pnpm dev:convex
+
+# Build for production
+pnpm build
+
+# Run tests
+pnpm test
+
+# Lint & format
+pnpm check
 ```
 
 ---
@@ -251,13 +261,13 @@ pnpm dev:convex
 
 | Problem | Solution |
 |---------|----------|
-| Port already in use | Change ports in `docker-compose.yml` or stop conflicting services |
-| Anthropic API errors | Verify `ANTHROPIC_API_KEY` in `.env` is valid and has credits |
-| Convex connection errors | Verify `CONVEX_URL` and `CONVEX_DEPLOYMENT` match your dashboard |
-| Linear ticket not created | Verify `LINEAR_API_KEY` and `LINEAR_TEAM_ID` — test with the Linear API playground |
+| Convex connection errors | Verify `VITE_CONVEX_URL` in `.env.local` matches your deployment URL in the Convex dashboard |
+| Clerk auth not working | Verify `VITE_CLERK_PUBLISHABLE_KEY` in `.env.local` and `CLERK_FRONTEND_API_URL` in Convex env vars |
+| Anthropic API errors | Verify `ANTHROPIC_API_KEY` in Convex env vars is valid and has credits |
+| Linear ticket not created | Verify `LINEAR_API_KEY` and `LINEAR_TEAM_ID` in Convex env vars |
 | Slack notifications not arriving | Test webhook: `curl -X POST -H 'Content-Type: application/json' -d '{"text":"test"}' YOUR_WEBHOOK_URL` |
 | Discord notifications not arriving | Test webhook similarly with Discord's webhook URL |
-| Resend email not sending | Verify `RESEND_API_KEY` is valid and `RESEND_FROM_EMAIL` uses a verified domain in the Resend dashboard |
-| Vercel Sandbox errors | Verify `VERCEL_TOKEN` has permission to create sandbox sessions |
-| Langfuse not loading | Wait 2-3 minutes for all dependencies to initialize (self-hosted) |
-| Clerk auth not working | Verify `CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` match your Clerk app |
+| Resend email not sending | Verify `RESEND_API_KEY` and that `RESEND_FROM_EMAIL` uses a verified domain |
+| Vercel Sandbox errors | Verify `VERCEL_TOKEN` in Convex env vars has sandbox permissions |
+| Port 3000 in use | Change port: `pnpm dev:web -- --port 3001` |
+| Convex schema errors | Run `npx convex dev` to re-sync schema with your deployment |
