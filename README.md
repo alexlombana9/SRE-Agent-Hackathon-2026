@@ -118,23 +118,51 @@ Incident submitted
 ```bash
 git clone https://github.com/alexlombana9/SRE-Agent-Hackathon-2026.git
 cd SRE-Agent-Hackathon-2026
+
+# Install pnpm if not already installed
+npm install -g pnpm
+
+# Install dependencies
 pnpm install
 
-# Configure environment
-cp .env.local.example .env.local
-# Edit .env.local with your Convex URL and Clerk key
+# Start Convex (auto-generates .env.local with VITE_CONVEX_URL)
+npx convex dev
+```
 
-# Start Convex dev server + frontend concurrently
+After Convex starts, set the **required** environment variables:
+
+```bash
+# Clerk auth (from https://dashboard.clerk.com → API Keys)
+npx convex env set CLERK_FRONTEND_API_URL https://your-app.clerk.accounts.dev
+
+# Anthropic LLM (from https://console.anthropic.com — must have credits loaded)
+npx convex env set ANTHROPIC_API_KEY sk-ant-your-key
+
+# Twilio (required at startup — use real creds or placeholders)
+npx convex env set TWILIO_ACCOUNT_SID ACxxxxx
+npx convex env set TWILIO_AUTH_TOKEN your-token
+```
+
+Add the Clerk publishable key to `.env.local`:
+
+```env
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_your-key-here
+```
+
+**Critical:** Create a JWT Template in Clerk Dashboard → Configure → JWT Templates → New → name it `convex`, set claims to `{"aud": "convex"}`. Without this, authentication will not work.
+
+```bash
+# Start both frontend and Convex dev server
 pnpm dev
 ```
 
 | Service | URL |
 |---------|-----|
 | Frontend | http://localhost:3000 |
-| Convex Dashboard | https://dashboard.convex.dev |
-| Langfuse | https://cloud.langfuse.com (or self-hosted) |
+| Convex Dashboard (local) | http://127.0.0.1:6790 |
+| Langfuse | https://cloud.langfuse.com (if configured) |
 
-See [QUICKGUIDE.md](./QUICKGUIDE.md) for detailed step-by-step instructions including all API key setup.
+See [QUICKGUIDE.md](./QUICKGUIDE.md) for detailed step-by-step instructions including all API key setup and troubleshooting.
 
 ## Repository Structure
 

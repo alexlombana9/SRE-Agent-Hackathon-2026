@@ -6,25 +6,25 @@ Step-by-step instructions to run and test **Trusty** — the SRE AI Agent platfo
 
 ## Prerequisites
 
-- **Node.js 20+** and **pnpm** installed
-- **Convex account** — free at https://dashboard.convex.dev
+- **Node.js 20+** installed ([nodejs.org](https://nodejs.org))
+- **pnpm** — install via `npm install -g pnpm` after Node.js is installed
 - **Clerk account** — free at https://dashboard.clerk.com
+- **Anthropic account with credits** — https://console.anthropic.com (minimum $5 USD required)
 - **API Keys** — see table below:
 
-| Service | Purpose | Where to get it |
-|---------|---------|----------------|
-| Convex | Backend DB + functions | https://dashboard.convex.dev |
-| Clerk | Authentication | https://dashboard.clerk.com |
-| Anthropic | LLM (Claude Sonnet 4.6) | https://console.anthropic.com |
-| Linear | Ticketing | https://linear.app/settings/api |
-| Slack | Incident notifications | https://api.slack.com/messaging/webhooks |
-| Discord | Incident notifications | https://discord.com/developers/docs/resources/webhook |
-| Resend | Email notifications | https://resend.com/api-keys |
-| Twilio | SMS notifications (Critical only) | https://console.twilio.com |
-| Langfuse | LLM observability | https://cloud.langfuse.com or self-hosted |
-| Vercel | Sandbox SDK (autonomous debugging) | https://vercel.com/docs/vercel-sandbox/sdk-reference |
+| Service | Required? | Purpose | Where to get it |
+|---------|-----------|---------|----------------|
+| Clerk | **Yes** | Authentication | https://dashboard.clerk.com |
+| Anthropic | **Yes** | LLM (Claude Sonnet 4.6) | https://console.anthropic.com |
+| Twilio | **Yes**\* | SMS notifications | https://console.twilio.com |
+| Linear | Optional | Ticketing | https://linear.app/settings/api |
+| Slack | Optional | Incident notifications | https://api.slack.com/messaging/webhooks |
+| Discord | Optional | Incident notifications | https://discord.com/developers/docs/resources/webhook |
+| Resend | Optional | Email notifications | https://resend.com/api-keys |
+| Langfuse | Optional | LLM observability | https://cloud.langfuse.com or self-hosted |
+| Vercel | Optional | Sandbox SDK (autonomous debugging) | https://vercel.com/docs/vercel-sandbox/sdk-reference |
 
-> **Note:** SMS (Twilio) is only triggered for Critical incidents. Slack and Discord can each use a test webhook for local development.
+> \* **Twilio** credentials are required at startup (the Twilio client initializes when Convex loads). If you don't have a Twilio account yet, you can set placeholder values to unblock development — see Step 5.
 
 ---
 
@@ -38,6 +38,10 @@ cd SRE-Agent-Hackathon-2026
 ## 2. Install Dependencies
 
 ```bash
+# If pnpm is not installed yet:
+npm install -g pnpm
+
+# Install project dependencies:
 pnpm install
 ```
 
@@ -48,68 +52,106 @@ pnpm install
 npx convex dev
 ```
 
-This will prompt you to log in and select/create a Convex project. The dev server will start and deploy your schema and functions.
+This will prompt you to log in or start without an account (local mode). The dev server will start and deploy your schema and functions.
+
+> **Note:** If you see `A local backend is still running on port 3210`, stop the previous process first. On Windows: `taskkill /F /PID <pid>` (find the PID with `netstat -ano | findstr 3210`). On Mac/Linux: `lsof -ti:3210 | xargs kill -9`.
 
 ## 4. Configure Frontend Environment
 
+The first run of `npx convex dev` auto-generates `.env.local` with `CONVEX_DEPLOYMENT` and `VITE_CONVEX_URL`. You need to add the Clerk publishable key:
+
+```env
+# Add this line to .env.local:
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_your-key-here
+```
+
+Get the publishable key from https://dashboard.clerk.com → your app → **API Keys** → **Publishable Key** (starts with `pk_test_`).
+
+## 5. Configure Backend Environment Variables
+
+Set these using the Convex CLI. For **local development**, run each command in your terminal:
+
+### Required — Clerk Authentication
+
 ```bash
-cp .env.local.example .env.local
+npx convex env set CLERK_FRONTEND_API_URL https://your-app.clerk.accounts.dev
 ```
 
-Edit `.env.local` with your values:
+Get this URL from https://dashboard.clerk.com → your app → **API Keys** → **Frontend API URL**.
 
-```env
-VITE_CONVEX_URL=https://your-deployment.convex.cloud
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
+### Required — Anthropic (LLM)
+
+```bash
+npx convex env set ANTHROPIC_API_KEY sk-ant-your-key-here
 ```
 
-## 5. Configure Backend Environment (Convex Dashboard)
+Get your API key from https://console.anthropic.com → **API Keys** → **Create Key**.
 
-Go to **https://dashboard.convex.dev** → your project → **Settings** → **Environment Variables** and add:
+> **Important:** Your Anthropic account must have credits loaded. Go to **Settings** → **Plans & Billing** to purchase credits (minimum $5 USD). Make sure the API key belongs to the **same workspace** where you loaded credits — the "Claude Code" workspace does not allow creating API keys from the console.
 
-```env
-# LLM
-ANTHROPIC_API_KEY=sk-ant-your-key-here
+### Required — Twilio (SMS)
 
-# Linear
-LINEAR_API_KEY=lin_api_...
-LINEAR_TEAM_ID=your-team-id
+The Twilio client initializes at startup and **will crash if credentials are missing**. Set real credentials or placeholders:
+
+```bash
+# Real credentials (from https://console.twilio.com):
+npx convex env set TWILIO_ACCOUNT_SID ACxxxxx
+npx convex env set TWILIO_AUTH_TOKEN your-auth-token
+
+# OR placeholder values (SMS won't work, but the app will start):
+npx convex env set TWILIO_ACCOUNT_SID placeholder
+npx convex env set TWILIO_AUTH_TOKEN placeholder
+```
+
+### Optional — Other Services
+
+```bash
+# Linear (Ticketing)
+npx convex env set LINEAR_API_KEY lin_api_...
+npx convex env set LINEAR_TEAM_ID your-linear-team-id
 
 # Slack
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
-SLACK_INCIDENTS_CHANNEL=#sre-incidents
-SLACK_CRITICAL_CHANNEL=#sre-critical
+npx convex env set SLACK_WEBHOOK_URL https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+npx convex env set SLACK_INCIDENTS_CHANNEL "#sre-incidents"
+npx convex env set SLACK_CRITICAL_CHANNEL "#sre-critical"
 
 # Discord
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR/WEBHOOK
+npx convex env set DISCORD_WEBHOOK_URL https://discord.com/api/webhooks/YOUR/WEBHOOK
 
-# Resend
-RESEND_API_KEY=re_your-resend-api-key
-RESEND_FROM_EMAIL=sre-agent@yourdomain.com
+# Resend (Email)
+npx convex env set RESEND_API_KEY re_your-resend-api-key
+npx convex env set RESEND_FROM_EMAIL sre-agent@yourdomain.com
 
-# Twilio (optional — Critical SMS only)
-TWILIO_ACCOUNT_SID=ACxxxxx
-TWILIO_AUTH_TOKEN=your-auth-token
-TWILIO_FROM_NUMBER=+1234567890
-TWILIO_ONCALL_NUMBER=+1987654321
+# Twilio phone numbers (for actual SMS delivery)
+npx convex env set TWILIO_FROM_NUMBER +1234567890
+npx convex env set TWILIO_ONCALL_NUMBER +1987654321
 
-# Langfuse
-LANGFUSE_PUBLIC_KEY=pk-lf-...
-LANGFUSE_SECRET_KEY=sk-lf-...
-LANGFUSE_HOST=https://cloud.langfuse.com
+# Langfuse (Observability)
+npx convex env set LANGFUSE_PUBLIC_KEY pk-lf-...
+npx convex env set LANGFUSE_SECRET_KEY sk-lf-...
+npx convex env set LANGFUSE_HOST https://cloud.langfuse.com
 
-# Vercel Sandbox
-VERCEL_TOKEN=your-vercel-token
+# Vercel Sandbox (Autonomous Debugging)
+npx convex env set VERCEL_TOKEN your-vercel-token
 ```
 
 See `.env.example` for a complete reference of all variables.
 
-## 6. Configure Clerk Authentication
+## 6. Configure Clerk Authentication (JWT Template)
 
-1. Go to https://dashboard.clerk.com and create an application
-2. Copy the **Publishable Key** into `.env.local` as `VITE_CLERK_PUBLISHABLE_KEY`
-3. In Clerk dashboard, add your Convex deployment URL to the allowed origins
-4. In Convex dashboard, set `CLERK_FRONTEND_API_URL` environment variable to your Clerk frontend API URL
+This step is **critical** — without it, Convex cannot verify authenticated users and all requests will fail with "unauthorized".
+
+1. Go to https://dashboard.clerk.com → your app
+2. Navigate to **Configure** → **JWT Templates**
+3. Click **New template**
+4. If you see a **Convex** preset in the template list, select it and click **Save** — done
+5. If there is no Convex preset, create a **Custom** template:
+   - **Name:** `convex` (must be exactly this, lowercase)
+   - **Claims:** `{"aud": "convex"}`
+   - Leave all other fields at their defaults
+   - Click **Save**
+
+> **Why is this needed?** The `ConvexProviderWithClerk` component in the frontend automatically requests a JWT using a template named `convex`. Convex verifies this token by checking the `aud` (audience) claim matches `"convex"` and the issuer matches `CLERK_FRONTEND_API_URL`. Without this template, `ctx.auth.getUserIdentity()` returns `null` and all authenticated operations fail.
 
 ## 7. Start the Application
 
@@ -127,8 +169,8 @@ You'll see logs from:
 | Service | URL | Description |
 |---------|-----|-------------|
 | Frontend | http://localhost:3000 | Incident management UI |
-| Convex Dashboard | https://dashboard.convex.dev | DB, logs, function inspector |
-| Langfuse | https://cloud.langfuse.com | LLM observability dashboard |
+| Convex Dashboard (local) | http://127.0.0.1:6790 | Local DB viewer, logs, function inspector |
+| Langfuse | https://cloud.langfuse.com | LLM observability dashboard (if configured) |
 
 ---
 
@@ -261,9 +303,16 @@ pnpm check
 
 | Problem | Solution |
 |---------|----------|
-| Convex connection errors | Verify `VITE_CONVEX_URL` in `.env.local` matches your deployment URL in the Convex dashboard |
-| Clerk auth not working | Verify `VITE_CLERK_PUBLISHABLE_KEY` in `.env.local` and `CLERK_FRONTEND_API_URL` in Convex env vars |
-| Anthropic API errors | Verify `ANTHROPIC_API_KEY` in Convex env vars is valid and has credits |
+| `pnpm` not recognized | Install it globally: `npm install -g pnpm` |
+| `Missing Twilio credentials` on `npx convex dev` | Twilio client initializes at startup. Set real credentials or placeholders: `npx convex env set TWILIO_ACCOUNT_SID placeholder` and `npx convex env set TWILIO_AUTH_TOKEN placeholder` |
+| `A local backend is still running on port 3210` | Kill the previous Convex process. Windows: `netstat -ano \| findstr 3210` then `taskkill /F /PID <pid>`. Mac/Linux: `lsof -ti:3210 \| xargs kill -9` |
+| `CLERK_FRONTEND_API_URL is used but not set` | Run: `npx convex env set CLERK_FRONTEND_API_URL https://your-app.clerk.accounts.dev` |
+| Page loads with infinite spinner + "unauthorized" errors | The Clerk JWT Template is missing or misconfigured. See Step 6 — you must create a JWT Template named `convex` with claims `{"aud": "convex"}` in the Clerk dashboard |
+| `No auth provider found matching the given token` | The JWT audience doesn't match. Verify the JWT Template in Clerk has claims `{"aud": "convex"}` and the template name is exactly `convex` |
+| `Your credit balance is too low` (Anthropic) | Purchase credits at https://console.anthropic.com → Settings → Plans & Billing (minimum $5). Ensure the API key belongs to the same workspace where credits are loaded |
+| `AI_LoadAPIKeyError: Anthropic API key is missing` | Set it: `npx convex env set ANTHROPIC_API_KEY sk-ant-your-key` |
+| Convex connection errors | Verify `VITE_CONVEX_URL` in `.env.local` matches your deployment URL |
+| Clerk sign-in redirects in a loop | Verify `VITE_CLERK_PUBLISHABLE_KEY` in `.env.local` matches the key from your Clerk dashboard |
 | Linear ticket not created | Verify `LINEAR_API_KEY` and `LINEAR_TEAM_ID` in Convex env vars |
 | Slack notifications not arriving | Test webhook: `curl -X POST -H 'Content-Type: application/json' -d '{"text":"test"}' YOUR_WEBHOOK_URL` |
 | Discord notifications not arriving | Test webhook similarly with Discord's webhook URL |
