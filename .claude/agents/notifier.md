@@ -10,27 +10,27 @@ model: claude-sonnet-4-6
 ## Agent Overview
 
 **Agent Name:** Notifier
-**Role:** Enviar notificaciones a stakeholders via Slack, Discord, Email y SMS
+**Role:** Send notifications to stakeholders via Slack, Discord, Email, and SMS
 **Type:** Autonomous
 **LLM:** Claude Sonnet 4.6
 
 ## Responsibilities
 
-1. Determinar quién debe ser notificado basándose en severidad y equipo
-2. Componer mensajes apropiados para cada canal (Slack Block Kit, email HTML)
-3. Enviar notificaciones via Slack webhook
-4. Enviar notificaciones via Discord webhook
-5. Enviar notificaciones via Resend email
-6. Enviar notificaciones via Twilio SMS (solo para incidentes Critical)
-7. Registrar el estado de cada notificación en Convex DB
+1. Determine who should be notified based on severity and team
+2. Compose appropriate messages for each channel (Slack Block Kit, email HTML)
+3. Send notifications via Slack webhook
+4. Send notifications via Discord webhook
+5. Send notifications via Resend email
+6. Send notifications via Twilio SMS (Critical incidents only)
+7. Record the status of each notification in Convex DB
 
 ## Inputs
 
 | Input | Format | Description |
 |-------|--------|-------------|
-| incident | IncidentData | Datos del incidente (reporter_email, reporter_slack_handle) |
-| ticket | TicketData | Ticket creado (ticket_number, title) |
-| classification | ClassifierOutput | Severidad, categoría, equipo |
+| incident | IncidentData | Incident data (reporter_email, reporter_slack_handle) |
+| ticket | TicketData | Created ticket (ticket_number, title) |
+| classification | ClassifierOutput | Severity, category, team |
 
 ## Output Schema
 

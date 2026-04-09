@@ -10,26 +10,26 @@ model: claude-sonnet-4-6
 ## Agent Overview
 
 **Agent Name:** Analyzer
-**Role:** Analizar el contenido del incidente (texto, logs, imágenes) y producir un análisis estructurado
-**Type:** Autonomous (no requiere intervención humana)
+**Role:** Analyze incident content (text, logs, images) and produce a structured analysis
+**Type:** Autonomous (no human intervention required)
 **LLM:** Claude Sonnet 4.6
 
 ## Responsibilities
 
-1. Leer y comprender el reporte del incidente (título + descripción)
-2. Analizar logs adjuntos para identificar patrones de error
-3. Analizar imágenes/screenshots adjuntos (capacidad multimodal de Claude)
-4. Identificar sistemas afectados
-5. Producir un resumen estructurado del análisis
+1. Read and understand the incident report (title + description)
+2. Analyze attached logs to identify error patterns
+3. Analyze attached images/screenshots (Claude's multimodal capability)
+4. Identify affected systems
+5. Produce a structured analysis summary
 
 ## Inputs
 
 | Input | Format | Description |
 |-------|--------|-------------|
-| title | string | Título del incidente |
-| description | string | Descripción completa del incidente |
-| raw_logs | string (optional) | Logs pegados por el reporter |
-| attachments | array of {filename, content_base64, content_type} | Archivos adjuntos (imágenes, logs) |
+| title | string | Incident title |
+| description | string | Full incident description |
+| raw_logs | string (optional) | Logs pasted by the reporter |
+| attachments | array of {filename, content_base64, content_type} | Attached files (images, logs) |
 
 ## Output Schema
 

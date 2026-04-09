@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Sistema multi-agente de IA para automatizar el ciclo completo de respuesta a incidentes en aplicaciones e-commerce: intake, análisis, ticketing, notificación, debugging autónomo y code review por IA. Construido para el **AgentX Hackathon 2026**.
+Multi-agent AI system to automate the full incident response lifecycle for e-commerce applications: intake, analysis, ticketing, notification, autonomous debugging, and AI code review. Built for the **AgentX Hackathon 2026**.
 
 ## Tech Stack
 
@@ -42,16 +42,16 @@ Multi-agent system with an **Orchestrator** that coordinates 5 specialized sub-a
  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘
 ```
 
-- **Orchestrator**: Coordina el pipeline secuencial. Human-in-the-loop para incidentes Critical.
-- **Analyzer Agent**: Análisis multimodal del incidente (texto + imágenes + logs).
-- **Ticketer Agent**: Crea tickets en Linear con contexto completo.
-- **Notifier Agent**: Notificaciones multi-canal (Slack, Discord, Email, SMS).
-- **Debugger Agent**: Fix autónomo en Vercel Sandbox (aislado, efímero).
-- **QA Reviewer Agent**: Revisa el fix propuesto, aprueba o rechaza con feedback.
+- **Orchestrator**: Coordinates the sequential pipeline. Human-in-the-loop for Critical incidents.
+- **Analyzer Agent**: Multimodal incident analysis (text + images + logs).
+- **Ticketer Agent**: Creates tickets in Linear with full context.
+- **Notifier Agent**: Multi-channel notifications (Slack, Discord, Email, SMS).
+- **Debugger Agent**: Autonomous fix in Vercel Sandbox (isolated, ephemeral).
+- **QA Reviewer Agent**: Reviews the proposed fix, approves or rejects with feedback.
 
 ### Data Flow
 
-Los agentes no se comunican entre sí directamente. Toda la data fluye a través de Convex DB: cada agente escribe su output como JSON estructurado en el registro del incidente, y el siguiente agente lee de ahí.
+Agents do not communicate with each other directly. All data flows through Convex DB: each agent writes its output as structured JSON to the incident record, and the next agent reads from there.
 
 ### State Machine
 
@@ -59,17 +59,17 @@ Los agentes no se comunican entre sí directamente. Toda la data fluye a través
 submitted → analyzing → ticketed → notified → debugging → reviewing → resolved
 ```
 
-Cada transición es una Convex mutation — atómicamente consistente y reactiva en el frontend via WebSocket.
+Each transition is a Convex mutation — atomically consistent and reactive on the frontend via WebSocket.
 
 ### Human-in-the-Loop
 
-Incidentes clasificados como **Critical** pausan el pipeline antes del ticketing. El frontend muestra un prompt de aprobación. El ingeniero puede modificar la clasificación antes de continuar.
+Incidents classified as **Critical** pause the pipeline before ticketing. The frontend displays an approval prompt. The engineer can modify the classification before continuing.
 
 ### Artifacts
 
-El sistema genera por cada incidente triageado:
-1. **Triage Report** (markdown): Análisis completo con clasificación, evidencia y recomendaciones.
-2. **Incident Timeline**: Registro cronológico de cada acción del agente (JSON).
+The system generates the following for each triaged incident:
+1. **Triage Report** (markdown): Complete analysis with classification, evidence, and recommendations.
+2. **Incident Timeline**: Chronological record of each agent action (JSON).
 
 ## Project Structure
 

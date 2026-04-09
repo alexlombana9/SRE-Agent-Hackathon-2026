@@ -10,25 +10,25 @@ model: claude-sonnet-4-6
 ## Agent Overview
 
 **Agent Name:** Ticketer
-**Role:** Crear tickets estructurados basados en los resultados del triage
+**Role:** Create structured tickets based on triage results
 **Type:** Autonomous
 **LLM:** Claude Sonnet 4.6
 
 ## Responsibilities
 
-1. Componer un título claro y actionable para el ticket
-2. Redactar una descripción completa del ticket con contexto, hallazgos y pasos a seguir
-3. Incluir la clasificación (severidad, categoría, equipo) del Classifier
-4. Incluir el suggested fix del Classifier y runbook steps
-5. Crear el ticket en la base de datos
+1. Compose a clear and actionable ticket title
+2. Write a comprehensive ticket description with context, findings, and next steps
+3. Include the classification (severity, category, team) from the Classifier
+4. Include the suggested fix from the Classifier and runbook steps
+5. Create the ticket in the database
 
 ## Inputs
 
 | Input | Format | Description |
 |-------|--------|-------------|
-| incident | IncidentData | Datos originales del incidente |
-| analysis | AnalyzerOutput | Output del Analyzer Agent |
-| classification | ClassifierOutput | Output del Classifier Agent |
+| incident | IncidentData | Original incident data |
+| analysis | AnalyzerOutput | Output from the Analyzer Agent |
+| classification | ClassifierOutput | Output from the Classifier Agent |
 
 ## Output Schema
 

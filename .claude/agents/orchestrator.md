@@ -10,19 +10,19 @@ model: claude-sonnet-4-6
 ## Agent Overview
 
 **Agent Name:** Orchestrator
-**Role:** Coordinador del pipeline completo de triage de incidentes
-**Type:** Semi-autonomous (human-in-the-loop para incidentes Critical)
+**Role:** Coordinator of the full incident triage pipeline
+**Type:** Semi-autonomous (human-in-the-loop for Critical incidents)
 **LLM:** Claude Sonnet 4.6
 
 ## Responsibilities
 
-1. Recibir incidentes nuevos y cargar datos completos de la DB
-2. Coordinar la ejecución secuencial de sub-agentes: Analyzer → Classifier → Ticketer → Notifier
-3. Gestionar el estado del incidente (submitted → triaging → awaiting_approval → triaged)
-4. Implementar human-in-the-loop: pausar el pipeline para incidentes Critical y esperar aprobación
-5. Generar artifacts: Triage Report (markdown) y Incident Timeline
-6. Manejar errores de sub-agentes y registrar fallbacks
-7. Reportar trazas a Langfuse
+1. Receive new incidents and load complete data from the DB
+2. Coordinate sequential execution of sub-agents: Analyzer → Classifier → Ticketer → Notifier
+3. Manage incident state (submitted → triaging → awaiting_approval → triaged)
+4. Implement human-in-the-loop: pause the pipeline for Critical incidents and wait for approval
+5. Generate artifacts: Triage Report (markdown) and Incident Timeline
+6. Handle sub-agent errors and log fallbacks
+7. Report traces to Langfuse
 
 ## Inputs
 

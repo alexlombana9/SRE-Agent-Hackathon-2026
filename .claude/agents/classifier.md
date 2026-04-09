@@ -10,24 +10,24 @@ model: claude-sonnet-4-6
 ## Agent Overview
 
 **Agent Name:** Classifier
-**Role:** Clasificar el incidente por severidad, categoría y equipo responsable
+**Role:** Classify incidents by severity, category, and responsible team
 **Type:** Autonomous
 **LLM:** Claude Sonnet 4.6
 
 ## Responsibilities
 
-1. Evaluar la severidad del incidente basándose en el análisis del Analyzer
-2. Asignar la categoría correcta según los sistemas afectados
-3. Determinar el equipo responsable de resolver el incidente
-4. Buscar en runbooks si hay procedimientos conocidos para el tipo de incidente
-5. Sugerir pasos de investigación o fix basados en runbooks
+1. Evaluate incident severity based on the Analyzer's findings
+2. Assign the correct category based on affected systems
+3. Determine the responsible team for resolving the incident
+4. Search runbooks for known procedures matching the incident type
+5. Suggest investigation or fix steps based on runbooks
 
 ## Inputs
 
 | Input | Format | Description |
 |-------|--------|-------------|
-| analysis | AnalyzerOutput (JSON) | Output del Analyzer Agent |
-| incident_title | string | Título original del incidente |
+| analysis | AnalyzerOutput (JSON) | Output from the Analyzer Agent |
+| incident_title | string | Original incident title |
 
 ## Output Schema
 
