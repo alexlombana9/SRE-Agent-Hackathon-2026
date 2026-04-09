@@ -12,7 +12,7 @@ function IndexRedirect() {
 
 	useEffect(() => {
 		if (!isLoaded) return
-		void navigate({ to: isSignedIn ? "/_authenticated" : "/sign-in" })
+		void navigate({ to: isSignedIn ? "/incidents" : "/sign-in" })
 	}, [isSignedIn, isLoaded, navigate])
 
 	return (

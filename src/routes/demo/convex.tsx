@@ -12,7 +12,7 @@ export const Route = createFileRoute('/demo/convex')({
 })
 
 function ConvexTodos() {
-  const todos = useQuery(api.todos.list)
+  const todos = useQuery(api.todos.list, {})
   const addTodo = useMutation(api.todos.add)
   const toggleTodo = useMutation(api.todos.toggle)
   const removeTodo = useMutation(api.todos.remove)
