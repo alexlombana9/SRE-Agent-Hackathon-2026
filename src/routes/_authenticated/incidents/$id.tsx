@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
-import { ArrowLeft, AlertCircle } from "lucide-react"
+import { ArrowLeft, AlertCircle, CheckCircle, XCircle, Bug } from "lucide-react"
 import { api } from "../../../../convex/_generated/api"
 import { AgentTrail } from "#/components/incidents/agent-trail"
 import { SeverityBadge } from "#/components/incidents/severity-badge"
@@ -140,6 +140,66 @@ function IncidentDetailPage() {
 							<pre className="max-h-64 overflow-auto rounded-md bg-muted p-3 text-xs">
 								{incident.rawLogs}
 							</pre>
+						</section>
+					)}
+
+					{incident.fixDiff && (
+						<section className="rounded-xl border bg-card p-5">
+							<div className="mb-3 flex items-center gap-2">
+								<Bug className="size-4 text-amber-600" />
+								<h2 className="font-semibold">Proposed Fix</h2>
+								{incident.debugAttempts > 0 && (
+									<span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+										Attempt {incident.debugAttempts}
+									</span>
+								)}
+							</div>
+							{incident.fixDescription && (
+								<p className="mb-3 text-sm text-muted-foreground">
+									{incident.fixDescription}
+								</p>
+							)}
+							<pre className="max-h-96 overflow-auto rounded-md bg-muted p-3 text-xs">
+								{incident.fixDiff}
+							</pre>
+						</section>
+					)}
+
+					{incident.qaScore !== undefined && incident.qaScore > 0 && (
+						<section className="rounded-xl border bg-card p-5">
+							<div className="mb-3 flex items-center gap-2">
+								{incident.qaApproved ? (
+									<CheckCircle className="size-4 text-green-600" />
+								) : (
+									<XCircle className="size-4 text-red-600" />
+								)}
+								<h2 className="font-semibold">QA Review</h2>
+								<span
+									className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+										incident.qaScore >= 80
+											? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300"
+											: incident.qaScore >= 50
+												? "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300"
+												: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+									}`}
+								>
+									Score: {incident.qaScore}/100
+								</span>
+								<span
+									className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+										incident.qaApproved
+											? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300"
+											: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+									}`}
+								>
+									{incident.qaApproved ? "Approved" : "Rejected"}
+								</span>
+							</div>
+							{incident.qaFeedback && (
+								<p className="whitespace-pre-wrap text-sm text-muted-foreground">
+									{incident.qaFeedback}
+								</p>
+							)}
 						</section>
 					)}
 				</div>

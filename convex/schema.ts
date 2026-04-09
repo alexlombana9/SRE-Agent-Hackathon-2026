@@ -67,6 +67,16 @@ export const incidents = zodTable("incidents", (zid) => ({
 	linearTicketNumber: z.number().optional(),
 	awaitingApproval: z.boolean().default(false),
 	analyzerThreadId: z.string().optional(),
+	triageThreadId: z.string().optional(),
+	fixDescription: z.string().optional(),
+	fixDiff: z.string().optional(),
+	qaScore: z.number().optional(),
+	qaFeedback: z.string().optional(),
+	qaApproved: z.boolean().optional(),
+	debugAttempts: z.number().default(0),
+	debuggerThreadId: z.string().optional(),
+	reviewerThreadId: z.string().optional(),
+	sandboxId: z.string().optional(),
 	userId: zid("users"),
 }))
 

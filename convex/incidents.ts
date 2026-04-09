@@ -55,10 +55,11 @@ export const create = zMutation({
 			attachmentIds: args.attachmentIds,
 			status: "submitted",
 			awaitingApproval: false,
+			debugAttempts: 0,
 			userId: user._id,
 		})
 
-		await ctx.scheduler.runAfter(0, internal.agents.runPipeline, {
+		await ctx.scheduler.runAfter(0, internal.agents.pipeline.runPipeline, {
 			incidentId: incidentId as unknown as string,
 		})
 
@@ -236,7 +237,7 @@ export const updateApproval = zMutation({
 			detail: "Critical incident approved — resuming pipeline",
 		})
 
-		await ctx.scheduler.runAfter(0, internal.agents.createTicket, {
+		await ctx.scheduler.runAfter(0, internal.agents.triage.resumeAfterApproval, {
 			incidentId: args.incidentId,
 		})
 	},
@@ -247,6 +248,69 @@ export const getInternal = zInternalQuery({
 	handler: async (ctx, args) => {
 		const id = args.incidentId as Id<"incidents">
 		return ctx.db.get(id)
+	},
+})
+
+export const updateFix = zInternalMutation({
+	args: z.object({
+		incidentId: z.string(),
+		fixDescription: z.string(),
+		fixDiff: z.string(),
+	}),
+	handler: async (ctx, args) => {
+		const id = args.incidentId as Id<"incidents">
+		await ctx.db.patch(id, {
+			fixDescription: args.fixDescription,
+			fixDiff: args.fixDiff,
+		})
+	},
+})
+
+export const updateQaReview = zInternalMutation({
+	args: z.object({
+		incidentId: z.string(),
+		qaScore: z.number(),
+		qaFeedback: z.string(),
+		qaApproved: z.boolean(),
+		reviewerThreadId: z.string().optional(),
+	}),
+	handler: async (ctx, args) => {
+		const id = args.incidentId as Id<"incidents">
+		await ctx.db.patch(id, {
+			qaScore: args.qaScore,
+			qaFeedback: args.qaFeedback,
+			qaApproved: args.qaApproved,
+			reviewerThreadId: args.reviewerThreadId,
+		})
+	},
+})
+
+export const incrementDebugAttempts = zInternalMutation({
+	args: z.object({ incidentId: z.string() }),
+	handler: async (ctx, args) => {
+		const id = args.incidentId as Id<"incidents">
+		const incident = await ctx.db.get(id)
+		if (!incident) return
+		await ctx.db.patch(id, {
+			debugAttempts: (incident.debugAttempts ?? 0) + 1,
+		})
+	},
+})
+
+export const updateDebuggerThread = zInternalMutation({
+	args: z.object({
+		incidentId: z.string(),
+		debuggerThreadId: z.string().optional(),
+		sandboxId: z.string().optional(),
+		triageThreadId: z.string().optional(),
+	}),
+	handler: async (ctx, args) => {
+		const id = args.incidentId as Id<"incidents">
+		const patch: Record<string, string | undefined> = {}
+		if (args.debuggerThreadId) patch.debuggerThreadId = args.debuggerThreadId
+		if (args.sandboxId) patch.sandboxId = args.sandboxId
+		if (args.triageThreadId) patch.triageThreadId = args.triageThreadId
+		await ctx.db.patch(id, patch)
 	},
 })
 
@@ -276,7 +340,7 @@ export const updateStatusPublic = zMutation({
 
 		// If resolving manually, schedule resolution notifications
 		if (args.newStatus === "resolved") {
-			await ctx.scheduler.runAfter(0, internal.agents.sendResolutionNotification, {
+			await ctx.scheduler.runAfter(0, internal.agents.notifier.sendResolutionNotifications, {
 				incidentId: args.incidentId,
 			})
 		}

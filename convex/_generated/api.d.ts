@@ -8,7 +8,13 @@
  * @module
  */
 
-import type * as agents from "../agents.js";
+import type * as agents_debugger from "../agents/debugger.js";
+import type * as agents_email from "../agents/email.js";
+import type * as agents_notifier from "../agents/notifier.js";
+import type * as agents_pipeline from "../agents/pipeline.js";
+import type * as agents_reviewer from "../agents/reviewer.js";
+import type * as agents_tools from "../agents/tools.js";
+import type * as agents_triage from "../agents/triage.js";
 import type * as auth from "../auth.js";
 import type * as config from "../config.js";
 import type * as http from "../http.js";
@@ -25,7 +31,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  agents: typeof agents;
+  "agents/debugger": typeof agents_debugger;
+  "agents/email": typeof agents_email;
+  "agents/notifier": typeof agents_notifier;
+  "agents/pipeline": typeof agents_pipeline;
+  "agents/reviewer": typeof agents_reviewer;
+  "agents/tools": typeof agents_tools;
+  "agents/triage": typeof agents_triage;
   auth: typeof auth;
   config: typeof config;
   http: typeof http;
